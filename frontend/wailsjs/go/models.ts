@@ -1797,6 +1797,8 @@ export namespace app {
 	    title: string;
 	    pages: number;
 	    bytes: number;
+	    find: string;
+	    findErr: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ShareAlbum(source);
@@ -1809,6 +1811,8 @@ export namespace app {
 	        this.title = source["title"];
 	        this.pages = source["pages"];
 	        this.bytes = source["bytes"];
+	        this.find = source["find"];
+	        this.findErr = source["findErr"];
 	    }
 	}
 	export class ShareChange {
@@ -1836,6 +1840,11 @@ export namespace app {
 	    until: string;
 	    host: string;
 	    published: string;
+	    publishedTitle?: string;
+	    own: boolean;
+	    passwordUnknown: boolean;
+	    from: string;
+	    here: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ShareLink(source);
@@ -1851,12 +1860,18 @@ export namespace app {
 	        this.until = source["until"];
 	        this.host = source["host"];
 	        this.published = source["published"];
+	        this.publishedTitle = source["publishedTitle"];
+	        this.own = source["own"];
+	        this.passwordUnknown = source["passwordUnknown"];
+	        this.from = source["from"];
+	        this.here = source["here"];
 	    }
 	}
 	export class ShareOptions {
 	    title: string;
 	    password: string;
 	    days: number;
+	    choice: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ShareOptions(source);
@@ -1867,6 +1882,7 @@ export namespace app {
 	        this.title = source["title"];
 	        this.password = source["password"];
 	        this.days = source["days"];
+	        this.choice = source["choice"];
 	    }
 	}
 	export class ShareService {

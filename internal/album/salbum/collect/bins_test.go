@@ -21,7 +21,7 @@ func TestCollectBins(t *testing.T) {
 		before := side.Clone()
 		dir := filepath.Join(sc.root, "Сбор")
 		pl := planCopy(t, sc, dir, all)
-		q, out := Album(sc.p, side, dir, pl)
+		q, out := Album(sc.p, side, dir, pl, nil)
 		if !slices.Equal(out.Bins, side.Bins) {
 			t.Fatalf("подборки копии: %v", out.Bins)
 		}

@@ -26,6 +26,8 @@ export class ShareUi {
   working = $state(false) // вызов Go в работе: кнопки серые
   error = $state('') // отказ подключения — под полем
   changeError = $state<{ part: 'password' | 'term'; text: string } | null>(null) // отказ пароля или срока — строка под своей строкой
+  finding = $state(false) // ShareFind в работе (167): экран поиска и «Повторить»
+  findError = $state('') // отказ самого поиска (не сбой «fail» сервиса — он в album.findErr)
   waiting = $state(false) // Go ещё не ответил на Share: возможно, ждёт ответа на вопрос в своём окне
   private waitTimer: ReturnType<typeof setTimeout> | undefined
   private req = 0
@@ -51,6 +53,7 @@ export class ShareUi {
     this.open = true
     this.error = ''
     this.changeError = null
+    this.findError = ''
     this.view = null // без прежнего вида: старый экран не мелькает, пока Go отвечает
     await this.refresh()
   }
@@ -70,6 +73,8 @@ export class ShareUi {
     this.epoch++
     this.req++
     this.working = false
+    this.finding = false
+    this.findError = ''
     this.unwait()
     this.error = ''
     this.changeError = null
@@ -113,6 +118,25 @@ export class ShareUi {
       if (ep === this.epoch) this.error = capFirst(errText(e))
     } finally {
       if (ep === this.epoch) this.working = false
+    }
+  }
+
+  // Поиск прежнего альбома на сервисе (167): зовёт экран поиска; итог (найден, не найден, сбой) приходит в виде.
+  // Отказ самого вызова (нет токена, идёт выгрузка) — строка и «Повторить»; вид перечитываем: токен мог пропасть.
+  async find() {
+    if (this.finding) return
+    const ep = this.epoch
+    this.finding = true
+    this.findError = ''
+    try {
+      const v = await this.bridge.ShareFind()
+      if (ep === this.epoch) this.take(v)
+    } catch (e) {
+      if (ep !== this.epoch) return
+      this.findError = capFirst(errText(e))
+      await this.refresh()
+    } finally {
+      if (ep === this.epoch) this.finding = false
     }
   }
 

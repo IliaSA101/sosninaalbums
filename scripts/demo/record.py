@@ -288,13 +288,20 @@ def default_photos() -> Path:
 
 
 def console_problems(out: Path) -> list[str]:
-    """Сообщения консоли прогона, кроме меток этапов и «не наше» (driver.NOT_OURS)."""
-    from driver import NOT_OURS
+    """Сообщения консоли прогона, кроме меток этапов и «не наше» (driver.not_ours)."""
+    from driver import not_ours
 
     f = out / "console.txt"
     if not f.is_file():
         return []
-    return [x for x in f.read_text(encoding="utf-8").splitlines() if x.startswith(("error", "warning", "pageerror")) and not any(s in x for s in NOT_OURS)]
+    # многострочное сообщение (pageerror со стеком) склеиваем: продолжения не начинаются с метки типа
+    msgs: list[str] = []
+    for ln in f.read_text(encoding="utf-8").splitlines():
+        if ln.startswith(("error", "warning", "pageerror", "http ", "== ")) or not msgs:
+            msgs.append(ln)
+        else:
+            msgs[-1] += "\n" + ln
+    return [x for x in msgs if x.startswith(("error", "warning", "pageerror")) and not not_ours(x)]
 
 
 def record(port: int, out: Path, photos: Path | None = None, slow: float = 1.0) -> int:

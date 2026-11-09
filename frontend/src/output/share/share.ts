@@ -17,7 +17,7 @@ import {
 export const shareShut = (sheets: number, sheetDoc: boolean, sharing: boolean): boolean => (sheets === 0 || sheetDoc) && !sharing
 
 // Экран окна. busyOther и run — до остального; blocked (не сохранён и т. п.) раньше подключения (0.32-146-T5-7).
-export type Screen = 'busyOther' | 'run' | 'blocked' | 'connect' | 'other' | 'incomplete' | 'expired' | 'link' | 'form'
+export type Screen = 'busyOther' | 'run' | 'blocked' | 'connect' | 'find' | 'moved' | 'other' | 'incomplete' | 'expired' | 'link' | 'form'
 
 export function screenOf(v: ShareView): Screen {
   if (v.busyOther) return 'busyOther'
@@ -29,6 +29,8 @@ export function screenOf(v: ShareView): Screen {
   const on = !!v.service.host && v.service.token
   // Без подключения править нечего: ссылка (если есть) только копируется, под ней — форма подключения.
   if (!on) return 'connect'
+  // Файл помнит выгруженный альбом, а записи нет: сначала поиск на сервисе (167); lost и fail — форма со строкой (ShareDialog).
+  if (v.album.find === 'need') return 'find'
   return LINK_SCREEN[st]
 }
 
@@ -36,6 +38,7 @@ export function screenOf(v: ShareView): Screen {
 const LINK_SCREEN: Record<LinkState, Screen> = {
   none: 'form',
   other: 'other',
+  moved: 'moved',
   incomplete: 'incomplete',
   expired: 'expired',
   gone: 'expired',
@@ -44,7 +47,7 @@ const LINK_SCREEN: Record<LinkState, Screen> = {
 }
 
 // Ссылку можно показать (копировать, открыть) без подключения: опубликована и срок не прошёл.
-export const hasLink = (v: ShareView): boolean => !!v.link && ['ok', 'changed', 'other'].includes(v.link.state) && !!v.link.url
+export const hasLink = (v: ShareView): boolean => !!v.link && ['ok', 'changed', 'other', 'moved'].includes(v.link.state) && !!v.link.url
 
 // Срок: Месяц · 3 месяца · Год (Days: 30 | 90 | 365). Сервис с меньшим пределом срока гасит лишние (0 — предел неизвестен).
 export const DAYS = [30, 90, 365] as const
@@ -119,7 +122,7 @@ export const blockText = (v: ShareView): string => (v.busyOther ? BUSY_OTHER : v
 export function changeToast(c: ShareChangeArgs, before: ShareLinkInfo | null, after: ShareLinkInfo | null): string {
   if (!after) return ''
   if (c.setPassword) {
-    const was = before?.password ?? ''
+    const was = before?.password || (before?.passwordUnknown ? '?' : '') // пароль с другого компьютера — «был», значение не известно
     if (was !== after.password) return !was ? PASSWORD_SET_TOAST : !after.password ? PASSWORD_REMOVED_TOAST : PASSWORD_CHANGED_TOAST
   }
   return c.days > 0 && after.until ? termToast(after.until) : ''

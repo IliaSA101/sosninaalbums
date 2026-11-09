@@ -19,9 +19,11 @@ import (
 // разметки — новые пути. Отметки: фото в плане — новый путь, пропавшее фото — как было,
 // остальные (фото вне сбора) не пишутся, а с ними и их членство в подборках (083-12); подборки —
 // копией. Отдельные фото (097 §6): в плане — новый путь в «Фото отдельно», пропавшие — как были,
-// не скопированные (режим «только альбом») — выпадают. ID — по новым путям (Rekey), отпечаток —
-// новый. p и side не меняются.
-func Album(p *model.Project, side model.Side, dir string, pl Plan) (*model.Project, model.Side) {
+// не скопированные (режим «только альбом») — выпадают. ID — по новым путям (Rekey). Отпечаток
+// остаётся (167-9): сбор — способ перенести проект, выгрузка из копии задаст вопрос «обновить или
+// как новый»; привязки refs к выгруженным альбомам (Editor.SnapshotSideRefs: Clone их теряет)
+// кладутся в копию. p и side не меняются.
+func Album(p *model.Project, side model.Side, dir string, pl Plan, refs []string) (*model.Project, model.Side) {
 	q := p.Clone()
 	moved := map[string]string{} // ключ пути источника → путь в папке сбора
 	photos := false
@@ -40,7 +42,7 @@ func Album(p *model.Project, side model.Side, dir string, pl Plan) (*model.Proje
 	q.FoldSources(paths.Linked)
 	out := model.Side{Marks: moveMarks(p, side.Marks, moved, pl.Missing), Bins: slices.Clone(side.Bins)}
 	salbum.Rekey(q, library.IDFor)
-	q.UID = model.NewUID() // собранная копия — другой проект: ссылка прежнего к ней не переходит (146 T4-9)
+	q.SetShareRefs(refs)
 	return q, out
 }
 
@@ -115,7 +117,7 @@ func moveMarks(p *model.Project, marks map[string]model.Mark, moved map[string]s
 // Save пишет собранный альбом q в path только относительными путями от его папки (WriteRel,
 // атомарно) и открывает записанное заново: пропавших больше, чем pl.Missing, — ошибка плана
 // (альбом уже записан, но об этом нужно сказать). Резервную копию прежнего файла делает App.
-// Печать отпечатка — пути собранного альбома: сбор выдаёт ему отпечаток (Album, 146 T4-9).
+// Печать отпечатка — пути собранного альбома (146 T4-9); сам отпечаток прежний (Album, 167-9).
 func Save(q *model.Project, side model.Side, path string, pl Plan) error {
 	q.SetUIDAt(model.UIDTag(q.UID, path))
 	if err := salbum.WriteRel(q, path, filepath.Dir(path), side); err != nil {

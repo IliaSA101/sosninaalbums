@@ -87,7 +87,7 @@ func TestShareResumePassword(t *testing.T) {
 	if msg, _ := r.run(Options{Title: "Свадьба", Password: "лето-4827", Days: 30}); msg == "" {
 		t.Fatal("ждали обрыв")
 	}
-	rec, _ := r.svc.look(r.curJob().Path)
+	rec, _ := r.svc.look(r.curJob().UID)
 	if rec.URL != "" || rec.Password != "лето-4827" {
 		t.Fatalf("после обрыва: url %q, пароль %q", rec.URL, rec.Password)
 	}

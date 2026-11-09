@@ -155,21 +155,16 @@ func (a *App) saveAs(ed *album.Editor, path string) (model.View, error) {
 	}
 	// Файл, поверх которого пишут, — в копию: «Сохранить как» мог промахнуться мимо имени.
 	cur := ed.Path()
-	newProject := cur == "" || !paths.SamePath(cur, path) // по этому пути записывается другой проект
-	if newProject {
-		a.backupBefore(path, backupKey(path), true)
-	} else {
-		a.backupBefore(path, backupKey(path), false)
-	}
-	save := ed.Save
-	if newProject {
-		save = ed.SaveNew // другой проект — новый отпечаток: чужая запись пути к нему не подойдёт (146 T4-9)
-	}
-	if err := save(path); err != nil {
+	otherPath := cur == "" || !paths.SamePath(cur, path) // по этому пути записывается другой файл
+	a.backupBefore(path, backupKey(path), otherPath)
+	// Решение «тот же проект или другой» и запись — под одним замком Editor (SaveOver): поверх файла
+	// с тем же отпечатком отпечаток и привязки к выгруженным альбомам сохраняются (167-25), иначе
+	// новый отпечаток без привязок: запись о ссылке прежнего проекта к нему не подойдёт (167-1).
+	if _, err := ed.SaveOver(path); err != nil {
 		return ed.View(), err
 	}
 	a.noticeBackup(ed)
-	a.shr.OnSaved(path, newProject) // запись о ссылке пути не переходит к другому проекту (146, С1)
+	a.shr.OnSaved(path, otherPath) // идущая выгрузка и правка ссылки этого пути останавливаются (167-10)
 	a.rememberProject(path)
 	// Застрявший черновик (draftLocked) не трогаем: он нечитаем, но это данные пользователя.
 	if !a.draftLocked.Load() {
@@ -237,10 +232,7 @@ func (a *App) changed(v model.View) (w model.View) {
 	func() {
 		a.mu.Lock()
 		defer a.mu.Unlock() // и при панике рассылки: guardEdit затем читает вид
-		if a.saveTimer != nil {
-			a.saveTimer.Stop()
-		}
-		a.saveTimer = time.AfterFunc(time.Second, a.autosave)
+		a.armSaveLocked()
 		old = foreign(v, a.editor())
 		// Другие открытые клиенты (окно и браузер в режиме разработки) тоже обновятся; холостой
 		// и обогнанной правке событие не нужно (075-3).
@@ -253,6 +245,21 @@ func (a *App) changed(v model.View) (w model.View) {
 		a.syncMissing(v.Rev)
 	}
 	return w
+}
+
+// armSaveLocked (под a.mu) перезапускает таймер автосохранения: через секунду тишины проект пишется.
+func (a *App) armSaveLocked() {
+	if a.saveTimer != nil {
+		a.saveTimer.Stop()
+	}
+	a.saveTimer = time.AfterFunc(time.Second, a.autosave)
+}
+
+// armSave — armSaveLocked для тех, кто не держит a.mu (привязка к ссылке — не правка, 167-15).
+func (a *App) armSave() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.armSaveLocked()
 }
 
 // autosave — сработал таймер. Проверка stopped под saveMu: запись не может начаться после

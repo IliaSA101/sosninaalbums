@@ -13,6 +13,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
+	xdraw "golang.org/x/image/draw"
 )
 
 // Страницы книги для листалки (139, 146): JPEG длинной стороной ≈ ShareLongSide px, без выбора
@@ -32,7 +33,7 @@ type WebPage struct {
 
 // WebSpec — параметры записи страниц. PageW/PageH — страница альбома до обреза (Settings),
 // BleedX/BleedY — полоса обреза по внешним краям, мм; Front/Back — сторонки обложки на листе
-// обложки (CoverZone front/back), мм; нужны, если обложка есть. LongSide — длинная сторона
+// обложки (CoverZone front/back), мм: из них берётся кусок формата страницы (заполнение); нужны, если обложка есть. LongSide — длинная сторона
 // страницы после обреза, px (0 — ShareLongSide): по ней NewWebSpec считает DPI, рендер берёт DPI.
 type WebSpec struct {
 	DPI            int
@@ -189,7 +190,10 @@ func (r *webRun) opt() render.Options {
 	return render.Options{PageW: r.w.PageW, PageH: r.w.PageH, DPI: r.w.DPI, Quality: q}
 }
 
-// cover: лист обложки → лицевая (место 0) и задняя (последнее) сторонки.
+// cover: лист обложки → лицевая (место 0) и задняя (последнее) сторонки. Сторонка листа —
+// физический размер (у квадратной обложки она не той пропорции, что страница), а листалка
+// показывает книгу одинаковыми листами: в файл идёт заполнение страницы (0.37.1-1) — наибольший
+// кусок сторонки с пропорцией страницы по центру, масштабированный ровно в px обычной страницы.
 func (r *webRun) cover(ctx context.Context, j *CoverJob) error {
 	opt := r.opt()
 	opt.PageW, opt.PageH = j.Opt.PageW, j.Opt.PageH // холст — лист обложки, не страница
@@ -197,8 +201,16 @@ func (r *webRun) cover(ctx context.Context, j *CoverJob) error {
 	if err != nil {
 		return fmt.Errorf("обложка: %w", err)
 	}
-	wins := [2]image.Rectangle{r.mmRect(r.w.Front, img), r.mmRect(r.w.Back, img)}
-	if err := r.write(img, wins, [2]int{0, len(r.pages) - 1}, opt); err != nil {
+	pw, ph := r.pagePx()
+	var parts [2]*image.RGBA
+	for i, side := range [2]layout.Rect{r.w.Front, r.w.Back} {
+		win := r.mmRect(side, img)
+		if win.Empty() {
+			return fmt.Errorf("обложка: окно сторонки %v вне листа %v", win, img.Bounds())
+		}
+		parts[i] = fillPage(img, fillCrop(win, pw, ph), pw, ph)
+	}
+	if err := r.write(parts, [2]int{0, len(r.pages) - 1}, opt); err != nil {
 		return fmt.Errorf("обложка: %w", err)
 	}
 	return nil
@@ -212,11 +224,51 @@ func (r *webRun) spread(ctx context.Context, s render.Spread, k int) error {
 	if err != nil {
 		return err
 	}
-	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	var parts [2]*image.RGBA
+	for i, win := range r.pageWins(img.Bounds().Dx(), img.Bounds().Dy()) {
+		if !win.In(img.Bounds()) || win.Empty() {
+			return fmt.Errorf("окно страницы %v вне листа %v", win, img.Bounds())
+		}
+		parts[i] = img.SubImage(win).(*image.RGBA)
+	}
+	return r.write(parts, [2]int{k, k + 1}, opt)
+}
+
+// pageWins — окна левой и правой страницы на холсте w×h разворота «По страницам». Окна одного
+// размера: у сгиба не режем, обрез — слева у левой, справа у правой, сверху и снизу. Единственное
+// место, откуда берётся размер страницы листалки (разворот и обложка).
+func (r *webRun) pageWins(w, h int) [2]image.Rectangle {
 	half, x0, y0 := w/2, mmPx(r.w.BleedX, r.w.DPI), mmPx(r.w.BleedY, r.w.DPI)
-	// Окна одного размера: у сгиба не режем, обрез — слева у левой, справа у правой, сверху и снизу.
-	wins := [2]image.Rectangle{image.Rect(x0, y0, half, h-y0), image.Rect(half, y0, w-x0, h-y0)}
-	return r.write(img, wins, [2]int{k, k + 1}, opt)
+	return [2]image.Rectangle{image.Rect(x0, y0, half, h-y0), image.Rect(half, y0, w-x0, h-y0)}
+}
+
+// pagePx — размер страницы листалки в px: окно страницы холста разворота, каким его рисует spread.
+func (r *webRun) pagePx() (w, h int) {
+	opt := r.opt()
+	opt.Split = true
+	cw, ch := render.CanvasSize(opt)
+	win := r.pageWins(cw, ch)[0]
+	return win.Dx(), win.Dy()
+}
+
+// fillCrop — наибольший прямоугольник пропорции pw:ph внутри win, по центру.
+func fillCrop(win image.Rectangle, pw, ph int) image.Rectangle {
+	w, h := win.Dx(), win.Dy()
+	cw, ch := w, h
+	if w*ph > h*pw { // сторонка шире страницы: режем по бокам
+		cw = max(1, min(w, int(math.Round(float64(h)*float64(pw)/float64(ph)))))
+	} else {
+		ch = max(1, min(h, int(math.Round(float64(w)*float64(ph)/float64(pw)))))
+	}
+	x, y := win.Min.X+(w-cw)/2, win.Min.Y+(h-ch)/2
+	return image.Rect(x, y, x+cw, y+ch)
+}
+
+// fillPage масштабирует src (кусок листа) в новый холст pw×ph.
+func fillPage(img *image.RGBA, src image.Rectangle, pw, ph int) *image.RGBA {
+	dst := image.NewRGBA(image.Rect(0, 0, pw, ph))
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, src, xdraw.Src, nil)
+	return dst
 }
 
 func (r *webRun) render(ctx context.Context, s render.Spread, opt render.Options) (*image.RGBA, error) {
@@ -234,9 +286,9 @@ func (r *webRun) render(ctx context.Context, s render.Spread, opt render.Options
 	return img, nil
 }
 
-// write пишет страницы-окна листа на места at; белые файлом не пишутся. Начатый лист
+// write пишет страницы листа на места at; белые файлом не пишутся. Начатый лист
 // дописывается; при ошибке его файлы убираются.
-func (r *webRun) write(img *image.RGBA, wins [2]image.Rectangle, at [2]int, opt render.Options) (err error) {
+func (r *webRun) write(parts [2]*image.RGBA, at [2]int, opt render.Options) (err error) {
 	var written []string
 	defer func() {
 		if err != nil {
@@ -245,18 +297,14 @@ func (r *webRun) write(img *image.RGBA, wins [2]image.Rectangle, at [2]int, opt 
 			}
 		}
 	}()
-	for i, win := range wins {
-		if win.Empty() || !win.In(img.Bounds()) {
-			return fmt.Errorf("окно страницы %v вне листа %v", win, img.Bounds())
-		}
-		blank := whiteRect(img, win)
+	for i, part := range parts {
+		blank := whiteRect(part, part.Bounds())
 		r.pages[at[i]].Blank = blank
 		if blank {
 			continue
 		}
 		p := filepath.Join(r.dir, r.names[at[i]])
-		sub := img.SubImage(win)
-		if err := noPanic("записи", func() error { return saveSheet(sub, p, opt) }); err != nil {
+		if err := noPanic("записи", func() error { return saveSheet(part, p, opt) }); err != nil {
 			return err
 		}
 		written = append(written, p)

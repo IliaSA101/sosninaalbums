@@ -144,6 +144,7 @@ method MovePhoto(arg1:string,arg2:string,arg3:number):Promise<model.View>
 method MoveSpread(arg1:string,arg2:number):Promise<model.View>
 method MyColors():Promise<Array<string>>
 method NewBin(arg1:string,arg2:Array<string>):Promise<model.View>
+method NewFromTemplate():Promise<APP.State>
 method NewLookSpread():Promise<model.View>
 method NewProject(arg1:string):Promise<APP.State>
 method NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>
@@ -288,6 +289,7 @@ method SetupVignette(arg1:string,arg2:model.VigSetup):Promise<APP.GridResult>
 method Share(arg1:APP.ShareOptions):Promise<boolean>
 method ShareChange(arg1:APP.ShareChange):Promise<APP.ShareView>
 method ShareConnect(arg1:string,arg2:string):Promise<APP.ShareView>
+method ShareFind():Promise<APP.ShareView>
 method ShareForget():Promise<APP.ShareView>
 method SharePassword():Promise<string>
 method SharePrintProfile(arg1:string):Promise<APP.PrintShare>
@@ -736,6 +738,8 @@ type APP.ShareAlbum
   title: string
   pages: number
   bytes: number
+  find: string
+  findErr: string
 type APP.ShareChange
   days: number
   setPassword: boolean
@@ -749,10 +753,16 @@ type APP.ShareLink
   until: string
   host: string
   published: string
+  publishedTitle?: string
+  own: boolean
+  passwordUnknown: boolean
+  from: string
+  here: string
 type APP.ShareOptions
   title: string
   password: string
   days: number
+  choice: string
 type APP.ShareService
   host: string
   url: string

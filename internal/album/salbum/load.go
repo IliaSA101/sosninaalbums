@@ -27,14 +27,17 @@ type FileProject struct {
 	UID string `json:"uid,omitempty"`
 	// UIDAt — печать отпечатка к пути, где он выдан (model.UIDTag): у копии файла в другом пути
 	// запись о ссылке пути чужая. Без смены номера формата; негодная — нет.
-	UIDAt    string               `json:"uidAt,omitempty"`
-	Product  string               `json:"product"`
-	Folders  []FileFolder         `json:"folders"`
-	Settings model.Settings       `json:"settings"`
-	Spreads  []*model.Spread      `json:"spreads"`
-	Photos   map[string]FilePhoto `json:"photos"`
-	Marks    markList             `json:"marks,omitempty"` // свои отметки (v5, 004)
-	Bins     binList              `json:"bins,omitempty"`  // подборки фото (v15, 083)
+	UIDAt string `json:"uidAt,omitempty"`
+	// ShareRefs — привязки к выгруженным альбомам (167, model/sharerefs.go): ref = хэш(uid, id), не больше
+	// 4, негодное — нет. Без смены номера формата.
+	ShareRefs refList              `json:"shareRefs,omitempty"`
+	Product   string               `json:"product"`
+	Folders   []FileFolder         `json:"folders"`
+	Settings  model.Settings       `json:"settings"`
+	Spreads   []*model.Spread      `json:"spreads"`
+	Photos    map[string]FilePhoto `json:"photos"`
+	Marks     markList             `json:"marks,omitempty"` // свои отметки (v5, 004)
+	Bins      binList              `json:"bins,omitempty"`  // подборки фото (v15, 083)
 	// Fonts — свои гарнитуры текстов (v15, 082): id → название, без путей к файлам.
 	Fonts map[string]model.FontRef `json:"fonts,omitempty"`
 	// Vars — поля альбома из dev-сборок v6 (030): только чтение, Load переносит их в листы
@@ -179,6 +182,7 @@ func fileHead(p *model.Project, f *FileProject) {
 	if model.GoodUIDTag(f.UIDAt) {
 		p.SetUIDAt(f.UIDAt)
 	}
+	p.SetShareRefs(f.ShareRefs) // привязки — к отпечатку: без годного они ничьи
 }
 
 // decodeFile разбирает файл: пути (с проверкой и выбором из двух), повторы,

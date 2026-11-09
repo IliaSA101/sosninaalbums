@@ -73,9 +73,14 @@ func TestEditorReplay(t *testing.T) {
 // rev и отмены не касается, шага в эталоне нет.
 // Исключение 0.37: SizeBasis — чтение настроек и числа разворотов для оценки объёма выгрузки
 // (TestSizeBasis); проекта, rev и отмены не касается, шага в эталоне нет (эталон пишет CI).
+// Исключение 0.38 (167): SetRef, KeepRefs, ShareRefs, SnapshotSideRefs — привязки к выгруженным альбомам
+// лежат в Editor вне проекта (карта по отпечатку), шага отмены, rev и «изменён» не дают; шагов в эталоне
+// нет (эталон пишет CI), проверки — editor_refs_test.go. Отпечаток при выгрузке (NeedFileUID, SaveFileUID,
+// SaveFresh, SaveOver) шаги в эталоне имеет — replayIdent (replay_uid_test.go), проверки — editor_pin_test.go.
 func TestEditorReplayMethods(t *testing.T) {
 	r, _ := replayRun(t)
-	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true, "MarkUnsaved": true, "UsedFiles": true, "SizeBasis": true}
+	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true, "MarkUnsaved": true, "UsedFiles": true, "SizeBasis": true,
+		"SetRef": true, "KeepRefs": true, "ShareRefs": true, "SnapshotSideRefs": true}
 	steps := map[string]bool{}
 	for _, s := range r.steps {
 		seen[strings.SplitN(s.Step, ":", 2)[0]] = true

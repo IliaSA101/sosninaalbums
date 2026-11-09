@@ -25,6 +25,7 @@
 
   // Блок готовой ссылки (state ok/changed): ссылка текстом, «Скопировать для клиента», «Открыть», пароль и срок с правкой,
   // при changed — «Обновить по ссылке». readonly — без подключения или у ссылки другого сервиса: только копировать и открыть.
+  // Не своя запись (167-12, link.own = false): ни «Скопировать для клиента», ни пароля — они принадлежат своему файлу.
   let { link, readonly = false }: { link: ShareLinkInfo; readonly?: boolean } = $props()
 
   const working = $derived(share.working)
@@ -66,29 +67,31 @@
   {#if link.published}<p class="meta">{link.published}</p>{/if}
   <p class="url" data-testid="share-url">{link.url}</p>
   <div class="row">
-    <button class="primary" disabled={working} onclick={() => share.copy()}>{COPY_CLIENT_LABEL}</button>
+    {#if link.own}<button class="primary" disabled={working} onclick={() => share.copy()}>{COPY_CLIENT_LABEL}</button>{/if}
     <button disabled={working} onclick={() => share.openLink()}>{OPEN_LABEL}</button>
   </div>
 
-  <div class="line" class:edit={editPass} data-part="password">
-    {#if editPass}
-      <ShareInput
-        bind:value={pass}
-        label={PASSWORD_LABEL}
-        placeholder={PASSWORD_PLACEHOLDER}
-        onenter={savePassword}
-        invalid={err?.part === 'password'}
-      />
-      <button class="ghost" disabled={working} onclick={invent}>{INVENT_LABEL}</button>
-      <button class="ghost" onclick={cancelPassword}>{CANCEL_LABEL}</button>
-      <button class="primary" disabled={working} onclick={savePassword}>{SAVE_PASSWORD_LABEL}</button>
-    {:else}
-      <span>{passwordLine(link.password)}</span>
-      {#if !readonly}<button class="mini" disabled={working} onclick={editPassword}>{CHANGE_LABEL}</button>{/if}
-    {/if}
-  </div>
+  {#if link.own}
+    <div class="line" class:edit={editPass} data-part="password">
+      {#if editPass}
+        <ShareInput
+          bind:value={pass}
+          label={PASSWORD_LABEL}
+          placeholder={PASSWORD_PLACEHOLDER}
+          onenter={savePassword}
+          invalid={err?.part === 'password'}
+        />
+        <button class="ghost" disabled={working} onclick={invent}>{INVENT_LABEL}</button>
+        <button class="ghost" onclick={cancelPassword}>{CANCEL_LABEL}</button>
+        <button class="primary" disabled={working} onclick={savePassword}>{SAVE_PASSWORD_LABEL}</button>
+      {:else}
+        <span>{passwordLine(link.password, link.passwordUnknown)}</span>
+        {#if !readonly}<button class="mini" disabled={working} onclick={editPassword}>{CHANGE_LABEL}</button>{/if}
+      {/if}
+    </div>
 
-  {#if err?.part === 'password'}<p class="err" role="alert">{err.text}</p>{/if}
+    {#if err?.part === 'password'}<p class="err" role="alert">{err.text}</p>{/if}
+  {/if}
 
   <div class="line" data-part="term">
     <span>{termLine(link.until)}</span>

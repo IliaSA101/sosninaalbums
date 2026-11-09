@@ -42,6 +42,7 @@ vi.mock('../../../wailsjs/go/app/App', async (orig) => ({
   ...(await orig<typeof import('../../../wailsjs/go/app/App')>()),
   OpenRecent: vi.fn(async () => ({ cancelled: true })),
   OpenProject: vi.fn(async () => ({ cancelled: true })),
+  NewFromTemplate: vi.fn(async () => ({ cancelled: true })),
   OpenLink: vi.fn(async () => {}),
   NewProject: vi.fn(async () => ({ cancelled: true })),
   NewVignetteSheet: vi.fn(async () => ({ cancelled: true })),
@@ -470,11 +471,14 @@ describe('команды', () => {
   })
 
   it('смена альбома ждёт набранный текст (087-5)', async () => {
-    const calls = [App.OpenRecent, App.NewProject, App.OpenProject, App.NewVignetteSheet] as unknown as ReturnType<typeof vi.fn>[]
+    const calls = [App.OpenRecent, App.NewProject, App.OpenProject, App.NewFromTemplate, App.NewVignetteSheet] as unknown as ReturnType<
+      typeof vi.fn
+    >[]
     const entries: [string, () => unknown][] = [
       ['openRecent', () => COMMANDS.openRecent(undefined, 'a.salbum')],
       ['new', () => COMMANDS.new()],
       ['open', () => COMMANDS.open()],
+      ['newTemplate', () => COMMANDS.newTemplate()],
       ['newDoc.create (альбом)', () => ((newDoc.kind = 'album'), newDoc.create())],
       ['newDoc.create (лист)', () => ((newDoc.kind = 'sheet'), newDoc.create())],
     ]
@@ -490,7 +494,7 @@ describe('команды', () => {
         expect(
           calls.map((c) => c.mock.calls.length),
           name + ': до записи текста Go не зовём',
-        ).toEqual([0, 0, 0, 0])
+        ).toEqual([0, 0, 0, 0, 0])
         release()
         await done
         expect(
@@ -502,5 +506,16 @@ describe('команды', () => {
       }
     }
     newDoc.kind = 'album'
+  })
+
+  it('newTemplate (167): вызывает NewFromTemplate и отдаёт ответ replaceState — отмена и «новая версия» как у «Открыть…»', async () => {
+    const rs = vi.spyOn(store, 'replaceState').mockResolvedValue(true)
+    try {
+      await COMMANDS.newTemplate()
+      expect(App.NewFromTemplate).toHaveBeenCalledTimes(1)
+      expect(rs).toHaveBeenCalledTimes(1)
+    } finally {
+      rs.mockRestore()
+    }
   })
 })

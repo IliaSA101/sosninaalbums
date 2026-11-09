@@ -329,7 +329,7 @@ class TestCheck(unittest.TestCase):
         # метки сцен и известный шум wails dev (NOT_OURS) — не ошибка; настоящая ошибка — код 6
         run = copy_meta_only(composed_run())
         con = run / "B" / "console.txt"
-        con.write_text("== scene B\npageerror: Cannot read properties of null (reading 'nodes')\n", encoding="utf-8")
+        con.write_text("== scene B\npageerror: Cannot read properties of null (reading 'nodes')\n    at x (http://h/wails/ipc.js:1:2)\n", encoding="utf-8")
         rep = vf.check_run(run, roll=ROLL, hero=HERO)
         self.assertEqual(rep.code, 0)
         self.assertIn("консоль — 0 строк", vf.render_summary(run, rep))

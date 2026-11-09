@@ -19,10 +19,10 @@ import (
 
 // Тесты по ревью и аудиту 0.32-146-T4-8: запись не воскресает, 404 не от альбома, флаги хода.
 
-// freezeShares делает shares.json «новее программы»: записи читаются, стереть или записать нельзя.
+// freezeShares делает projects.json «новее программы»: записи читаются, стереть или записать нельзя.
 func freezeShares(t *testing.T, cfg string) {
 	t.Helper()
-	p := prefs.SharesPath(cfg)
+	p := prefs.ProjectsPath(cfg)
 	b, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)
@@ -35,35 +35,37 @@ func freezeShares(t *testing.T, cfg string) {
 
 func isHealth(q *http.Request) bool { return strings.HasSuffix(q.URL.Path, "/health") }
 
-// Аудит п. 1: «Сохранить как» поверх файла, а shares.json не пишется — запись прежнего альбома не
-// возвращается, «Обновить по ссылке» не шлёт страницы нового в Update старого id.
+// Аудит п. 1: «Отозвать», а projects.json не пишется (стереть запись нельзя) — запись отозванного
+// альбома не возвращается, «Обновить по ссылке» не шлёт страницы в Update старого id.
 func TestShareDropNotWritten(t *testing.T) {
 	r := newRig(t)
 	r.connect()
 	r.must(Options{Days: 30})
 	freezeShares(t, r.cfg)
-	path := r.curJob().Path
-	if _, ok := r.svc.look(path); !ok {
+	uid := r.curJob().UID
+	if _, ok := r.svc.look(uid); !ok {
 		t.Fatal("оснастка: запись должна читаться из замороженного файла")
+	}
+	if _, err := r.svc.Revoke(); err == nil || !strings.Contains(err.Error(), "убрать не удалось") {
+		t.Fatalf("Revoke при замороженном файле: %v", err)
 	}
 	h := &headerLog{}
 	r.setFault(h.fault)
-	r.svc.OnSaved(path, true)
-	if _, ok := r.svc.look(path); ok {
-		t.Fatal("запись пережила «Сохранить как»: стереть на диске не вышло, метки нет")
+	if _, ok := r.svc.look(uid); ok {
+		t.Fatal("запись пережила отзыв: стереть на диске не вышло, метки нет")
 	}
 	if v := r.state(); v.Link != nil {
 		t.Errorf("окно показывает прежнюю ссылку: %+v", v.Link)
 	}
 	if _, err := r.svc.Text(); err == nil {
-		t.Error("«Скопировать» отдало ссылку прежнего альбома")
+		t.Error("«Скопировать» отдало ссылку отозванного альбома")
 	}
 	ok, err := r.svc.Share(Options{}) // «Обновить по ссылке»
 	if ok || err == nil {
 		t.Fatalf("Days:0 без записи: %v %v", ok, err)
 	}
 	if h.n != 0 {
-		t.Errorf("к сервису ушло %d запросов по записи прежнего альбома", h.n)
+		t.Errorf("к сервису ушло %d запросов по записи отозванного альбома", h.n)
 	}
 }
 
@@ -73,8 +75,8 @@ func TestShareDropMarkCleared(t *testing.T) {
 	r.connect()
 	r.must(Options{Days: 30})
 	freezeShares(t, r.cfg)
-	r.svc.OnSaved(r.curJob().Path, true)
-	msg, _ := r.run(Options{Days: 30}) // запись нового ляжет только в память: shares.json заморожен
+	_, _ = r.svc.Revoke()              // запись не стёрлась: метка «сброшена»
+	msg, _ := r.run(Options{Days: 30}) // запись нового ляжет только в память: projects.json заморожен
 	if !strings.Contains(msg, "Ссылка готова, но записать её") {
 		t.Fatalf("итог: %q", msg)
 	}
@@ -104,7 +106,7 @@ func TestShareNotFoundNotAlbum(t *testing.T) {
 	if l := r.state().Link; l == nil || l.State != "changed" {
 		t.Errorf("живая ссылка после 404 на health: %+v", l)
 	}
-	if rec, _ := r.svc.look(r.curJob().Path); rec.Gone {
+	if rec, _ := r.svc.look(r.curJob().UID); rec.Gone {
 		t.Error("запись помечена «нет на сервере»")
 	}
 
@@ -167,30 +169,32 @@ func TestShareGoneByID(t *testing.T) {
 	if _, err := r.svc.Change(Change{Days: 90}); err != nil {
 		t.Fatal(err)
 	}
-	if rec, _ := r.svc.look(r.curJob().Path); rec.Gone {
+	if rec, _ := r.svc.look(r.curJob().UID); rec.Gone {
 		t.Error("удачный Patch не снял пометку")
 	}
 }
 
-// Аудит п. 5: опоздавший put не пишет в путь, на который легло другое сохранение.
+// Аудит п. 5: опоздавший put не пишет, когда на путь легло другое сохранение (OnSaved), — запись
+// остаётся прежней (она по uid и не стирается, 167-10).
 func TestShareLatePutSkipped(t *testing.T) {
 	r := newRig(t)
 	r.connect()
 	r.must(Options{Days: 30})
-	path := r.curJob().Path
+	path, uid := r.curJob().Path, r.curJob().UID
 	run := &runState{path: path}
 	r.svc.mu.Lock()
 	r.svc.run = run
 	r.svc.mu.Unlock()
-	rec, _ := r.svc.look(path)
+	rec, _ := r.svc.look(uid)
 	r.svc.OnSaved(path, true)
-	rec.Title = "прежний"
-	wrote, err := r.svc.putIf(path, rec, r.svc.own(t.Context(), run))
+	late := rec
+	late.Title = "опоздавший"
+	wrote, err := r.svc.putIf(uid, late, r.svc.own(t.Context(), run))
 	if wrote || err != nil {
 		t.Errorf("putIf после OnSaved: %v %v", wrote, err)
 	}
-	if _, ok := r.svc.look(path); ok {
-		t.Error("запись прежнего альбома воскресла")
+	if got, _ := r.svc.look(uid); got.Title != rec.Title {
+		t.Errorf("опоздавшая запись легла: %q", got.Title)
 	}
 }
 

@@ -19,13 +19,19 @@
   // Форма выгрузки: название, пароль (необязательно), срок; сводка из Go. Окно монтируется заново при каждом открытии.
   // Проверки пароля и названия — в Go (его отказ придёт тостом), здесь только «название не пусто».
   // Название и пароль записи подставляются при «Выгрузить заново» с ссылки другого сервиса; «Отмена» тогда возвращает к ссылке (oncancel).
-  let { title: seedTitle, password: seedPass = '', oncancel }: { title?: string; password?: string; oncancel?: () => void } = $props()
+  // choice 'new' — форма из экрана moved («Выгрузить как новый»): ответ уходит в Share; «Отмена» возвращает к вопросу.
+  let {
+    title: seedTitle,
+    password: seedPass = '',
+    choice,
+    oncancel,
+  }: { title?: string; password?: string; choice?: 'new'; oncancel?: () => void } = $props()
   const v = $derived(share.view!)
   let title = $state(untrack(() => seedTitle) ?? share.view?.album.title ?? '')
   let password = $state(untrack(() => seedPass))
   let days = $state(loadDays(share.view?.service.days))
   const working = $derived(share.working)
-  const can = $derived(!working && title.trim() !== '')
+  const can = $derived(!working && !share.finding && title.trim() !== '')
 
   async function invent() {
     const p = await share.invent()
@@ -34,7 +40,7 @@
   function go() {
     if (!can) return
     saveDays(days)
-    void share.start({ title: title.trim(), password, days })
+    void share.start({ title: title.trim(), password, days, ...(choice && { choice }) })
   }
 </script>
 

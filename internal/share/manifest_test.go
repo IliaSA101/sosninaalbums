@@ -16,6 +16,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/api/albums"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -307,5 +308,40 @@ func TestShareManifestSizeText(t *testing.T) {
 	}
 	if sizeText(1, 1<<20) != "1 МБ" || sizeText(1<<20, 1<<20) != "1 МБ" || sizeText(1<<20+1, 1<<20) != "2 МБ" || sizeText(1500, 1000) != "2 КБ" {
 		t.Error("округление размера")
+	}
+}
+
+// Обложка на настоящем RunWeb: сторонки квадратнее страницы, но w/h front и back в манифесте
+// равны страницам книги (0.37.1-1).
+func TestShareManifestCoverFromRunWeb(t *testing.T) {
+	spec := specM
+	spec.Front = layout.Rect{X: 120, Y: 10, W: 70, H: 70}
+	spec.Back = layout.Rect{X: 5, Y: 10, W: 70, H: 70}
+	tw, th := spec.Trimmed()
+	spec.DPI = export.WebDPI(tw, th, 0)
+	dir := pagesDir(t)
+	cream := color.RGBA{250, 235, 205, 255}
+	sheet := render.Spread{Bg: [2]color.RGBA{cream, cream}, Plates: []render.Plate{
+		{Rect: layout.Rect{X: 120, Y: 10, W: 70, H: 70}, Color: color.RGBA{220, 30, 30, 255}},
+		{Rect: layout.Rect{X: 5, Y: 10, W: 70, H: 70}, Color: color.RGBA{30, 30, 220, 255}},
+	}}
+	job := &export.CoverJob{Spread: sheet, Opt: render.Options{PageW: 130, PageH: 90, DPI: 20, Quality: 95}}
+	sp := []render.Spread{{Bg: [2]color.RGBA{cream, cream}}}
+	pages, err := export.RunWeb(context.Background(), sp, job, spec, dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := BuildManifest(context.Background(), dir, pages, true, spec, "Т", "g", albums.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Pages) != 4 {
+		t.Fatalf("страницы: %+v", m.Pages)
+	}
+	pg := m.Pages[1]
+	for _, i := range []int{0, 3} {
+		if c := m.Pages[i]; c.W != pg.W || c.H != pg.H || c.W == 0 {
+			t.Errorf("страница %d (%s): %d×%d, обычная %d×%d", i+1, c.Role, c.W, c.H, pg.W, pg.H)
+		}
 	}
 }

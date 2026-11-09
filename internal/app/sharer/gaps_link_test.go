@@ -35,7 +35,7 @@ func TestShareProlongFromResponse(t *testing.T) {
 	r := newRigLimits(t, albums.Limits{MaxDays: 90})
 	r.connect()
 	r.must(Options{Days: 30})
-	before, _ := r.svc.look(r.curJob().Path)
+	before, _ := r.svc.look(r.curJob().UID)
 	day := 24 * time.Hour
 	if d := time.Until(before.ExpiresAt); d < 29*day || d > 31*day {
 		t.Fatalf("исходный срок: %v", before.ExpiresAt)
@@ -44,7 +44,7 @@ func TestShareProlongFromResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec, ok := r.svc.look(r.curJob().Path)
+	rec, ok := r.svc.look(r.curJob().UID)
 	if !ok {
 		t.Fatal("записи нет")
 	}
@@ -58,14 +58,14 @@ func TestShareProlongFromResponse(t *testing.T) {
 		t.Errorf("продление тронуло ссылку или пароль: было %+v стало %+v", before, rec)
 	}
 	r.restart()
-	if got, _ := r.svc.look(r.curJob().Path); !got.ExpiresAt.Equal(rec.ExpiresAt) {
+	if got, _ := r.svc.look(r.curJob().UID); !got.ExpiresAt.Equal(rec.ExpiresAt) {
 		t.Errorf("после перезапуска срок %v, ждали %v", got.ExpiresAt, rec.ExpiresAt)
 	}
 	// Сокращение тоже от сегодняшнего дня: 30 дней вместо 90.
 	if _, err := r.svc.Change(Change{Days: 30}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := r.svc.look(r.curJob().Path); time.Until(got.ExpiresAt) > 31*day {
+	if got, _ := r.svc.look(r.curJob().UID); time.Until(got.ExpiresAt) > 31*day {
 		t.Errorf("срок после «30 дней»: %v", got.ExpiresAt)
 	}
 }
@@ -78,13 +78,13 @@ func TestShareChangeGone(t *testing.T) {
 		r.connect()
 		r.must(Options{Password: "pass-1234", Days: 30})
 		id, _ := r.rec()
-		before, _ := r.svc.look(r.curJob().Path)
+		before, _ := r.svc.look(r.curJob().UID)
 		deleteOnServer(r, id)
 		_, err := r.svc.Change(c)
 		if err == nil || !strings.Contains(err.Error(), "Ссылки больше нет") || strings.Contains(err.Error(), "404") {
 			t.Fatalf("%+v: ошибка %v", c, err)
 		}
-		rec, ok := r.svc.look(r.curJob().Path)
+		rec, ok := r.svc.look(r.curJob().UID)
 		if !ok || !rec.Gone || rec.ID != id || rec.URL != before.URL || rec.Password != "pass-1234" || !rec.ExpiresAt.Equal(before.ExpiresAt) {
 			t.Fatalf("%+v: запись после 404: %v %+v", c, ok, rec)
 		}
@@ -108,7 +108,7 @@ func TestShareChangeGone(t *testing.T) {
 		if n := patches.Load(); n != 1 {
 			t.Errorf("%+v: повтор отправил %d запросов PATCH, ждали 1", c, n)
 		}
-		if again, _ := r.svc.look(r.curJob().Path); again != rec {
+		if again, _ := r.svc.look(r.curJob().UID); again != rec {
 			t.Errorf("%+v: повтор изменил запись: %+v -> %+v", c, rec, again)
 		}
 	}
@@ -131,11 +131,11 @@ func TestShareRevokeGone(t *testing.T) {
 	if err != nil || v.Link != nil {
 		t.Fatalf("«Да»: %v %+v", err, v.Link)
 	}
-	if _, ok := r.svc.look(r.curJob().Path); ok {
+	if _, ok := r.svc.look(r.curJob().UID); ok {
 		t.Error("запись осталась в shares.json")
 	}
 	r.restart()
-	if _, ok := r.svc.look(r.curJob().Path); ok {
+	if _, ok := r.svc.look(r.curJob().UID); ok {
 		t.Error("запись вернулась после перезапуска")
 	}
 	if _, err := r.svc.Revoke(); err == nil {

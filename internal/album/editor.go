@@ -76,11 +76,14 @@ type Editor struct {
 	closed bool
 	// diskUID — отпечаток проекта (146, editor_uid.go), который лежит в файле path; "" — не лежит
 	// или неизвестен. Отпечаток не делает альбом «изменённым»: в файл он попадает с ближайшей
-	// записью или перед выгрузкой (SaveUID).
+	// записью или перед выгрузкой (SaveFileUID).
 	diskUID string
 	// seals — печати отпечатков (editor_uid.go): отпечаток → печать из файла или выданная. По
 	// отпечатку, а не одна: Ctrl+Z после Restore копии с другим отпечатком возвращает и его печать.
 	seals map[string]string
+	// refs — привязки к выгруженным альбомам (167, editor_refs.go): отпечаток → ref. По отпечатку,
+	// как печати: отмена и Restore меняют отпечаток, и привязки следуют за ним сами.
+	refs map[string][]string
 }
 
 // editorSeq — счётчик номеров Editor на процесс: у двух Editor номера разные, 0 не бывает.
@@ -109,8 +112,9 @@ func NewEditor(p *model.Project, path string) (*Editor, error) {
 	e := &Editor{p: q, path: path, origin: path, from: q.From(),
 		backup: path != "" && q.From() != 0 && q.From() < model.FormatVersion,
 		marks:  side.Marks, bins: side.Bins, marksRev: nextMarksRev(), id: editorSeq.Add(1), diskUID: disk,
-		seals: map[string]string{}}
+		seals: map[string]string{}, refs: map[string][]string{}}
 	e.keepSeal(p) // p, а не q: печать в JSON копии не идёт
+	e.keepRefs(p)
 	return e, nil
 }
 
@@ -525,6 +529,7 @@ func (e *Editor) Restore(q *model.Project) (model.View, error) {
 		*p = *src
 		p.SetFrom(from)
 		e.keepSeal(q)
+		e.keepRefs(q)
 		ensureUID(p) // копия до 0.32 без отпечатка — новый: чьей она была, неизвестно (T4-9)
 		return nil
 	}, func() []MarkChange { return e.replaceMarks(side.Marks) },

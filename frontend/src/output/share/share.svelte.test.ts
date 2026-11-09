@@ -311,3 +311,55 @@ describe('ожидание ответа на вопрос Go (T5-11)', () => {
     expect(share.waiting).toBe(false)
   })
 })
+
+describe('поиск прежнего альбома (167)', () => {
+  beforeEach(() => {
+    share.finding = false
+    share.findError = ''
+  })
+
+  it('find() принимает вид Go; второй вызов, пока первый идёт, не рождает ещё один запрос', async () => {
+    stub = new StubShare('find')
+    share.bridge = stub
+    const a = share.find()
+    const b = share.find()
+    await Promise.all([a, b])
+    expect(stub.calls.filter((c) => c === 'ShareFind').length).toBe(1)
+    expect(share.view?.link?.state).toBe('moved')
+    expect(share.finding).toBe(false)
+  })
+
+  it('отказ вызова — строка findError и перечитанный вид; новый вызов её сбрасывает', async () => {
+    stub = new StubShare('find')
+    stub.fail.ShareFind = 'нет токена'
+    share.bridge = stub
+    await share.find()
+    expect(share.findError).toBe('Нет токена')
+    expect(stub.calls).toContain('ShareState')
+    await share.find()
+    expect(share.findError).toBe('')
+  })
+
+  it('альбом сменился во время поиска: ответ прежнего отбрасывается, состояние сброшено', async () => {
+    stub = new StubShare('find')
+    share.bridge = stub
+    share.watchAlbum('1|a')
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const orig = stub.ShareFind.bind(stub)
+    stub.ShareFind = async () => (await gate, orig())
+    const p = share.find()
+    expect(share.finding).toBe(true)
+    share.watchAlbum('2|b')
+    expect(share.finding).toBe(false)
+    release()
+    await p
+    expect(share.view).toBeNull() // «moved» прежнего альбома не показан
+  })
+
+  it('show() сбрасывает прежнюю ошибку поиска', async () => {
+    share.findError = 'старая'
+    await share.show()
+    expect(share.findError).toBe('')
+  })
+})

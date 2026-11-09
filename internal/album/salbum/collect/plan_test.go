@@ -447,7 +447,7 @@ func TestCollectLoose(t *testing.T) {
 		t.Fatalf("пропавшие отдельные: %v, ждали %v", pl.LooseLost, wantLost)
 	}
 	dir := filepath.Join(root, "Сбор")
-	q, _ := Album(p, model.Side{}, dir, pl)
+	q, _ := Album(p, model.Side{}, dir, pl, nil)
 	wantLoose := []model.LooseAdd{
 		{ID: "0123456789ab", At: 1, Files: []model.LooseFile{{Path: filepath.Join(dir, DirLoose, "1.jpg")}, {Path: filepath.Join(dir, DirLoose, "2.jpg")}}},
 		{ID: "0123456789ac", At: 2, Files: []model.LooseFile{{Path: lost}, {Path: gone}}},
@@ -464,7 +464,7 @@ func TestCollectLoose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q, _ := Album(p, model.Side{}, dir, pl); q.Loose != nil || len(pl.LooseLost) != 0 || rels(pl)[inA] != "Фото/Прочие/1.jpg" {
+	if q, _ := Album(p, model.Side{}, dir, pl, nil); q.Loose != nil || len(pl.LooseLost) != 0 || rels(pl)[inA] != "Фото/Прочие/1.jpg" {
 		t.Fatalf("без отдельных: %v %v %v", q.Loose, pl.LooseLost, rels(pl))
 	}
 }

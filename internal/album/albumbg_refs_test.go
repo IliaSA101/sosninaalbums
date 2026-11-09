@@ -224,7 +224,7 @@ func refsCollect(t *testing.T, e *album.Editor, c *bgCase, dir string) {
 		t.Fatalf("сбор: сводка %+v", in)
 	}
 	out := filepath.Join(dir, "out")
-	q, _ := collect.Album(p, model.Side{}, out, pl)
+	q, _ := collect.Album(p, model.Side{}, out, pl, nil)
 	np := filepath.Join(out, filepath.FromSlash(pl.Items[i].Rel))
 	if q.AlbumBg == nil || q.AlbumBg.Photo != library.IDFor(np) {
 		t.Fatalf("сбор: фон альбома %+v, ждали ID по пути %s", q.AlbumBg, np)
@@ -247,7 +247,7 @@ func refsCollect(t *testing.T, e *album.Editor, c *bgCase, dir string) {
 	if err != nil || !slices.Equal(lost.Missing, []string{c.id}) {
 		t.Fatalf("сбор без файла: Missing %v, %v", lost.Missing, err)
 	}
-	if q, _ := collect.Album(p, model.Side{}, out, lost); q.AlbumBg == nil || q.AlbumBg.Photo != c.id {
+	if q, _ := collect.Album(p, model.Side{}, out, lost, nil); q.AlbumBg == nil || q.AlbumBg.Photo != c.id {
 		t.Fatalf("сбор без файла: фон альбома %+v", q.AlbumBg)
 	}
 }
@@ -373,7 +373,7 @@ func TestAlbumBgRefsFamily(t *testing.T) {
 		t.Fatalf("сбор: файл должен лечь один раз, вместе с фото: %+v, %v", pl.Items, err)
 	}
 	out := filepath.Join(dir, "out")
-	q, _ := collect.Album(p, model.Side{}, out, pl)
+	q, _ := collect.Album(p, model.Side{}, out, pl, nil)
 	id := library.IDFor(filepath.Join(out, filepath.FromSlash(pl.Items[0].Rel)))
 	if q.AlbumBg == nil || q.AlbumBg.Photo != model.CopyID(id, 2) || !q.Placed(id) {
 		t.Fatalf("сбор: фон %+v, ждали копию %s", q.AlbumBg, id)

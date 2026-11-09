@@ -30,10 +30,11 @@ type job struct {
 	title         string
 	password      string
 	days          int
-	base          *prefs.ShareRecord // продолжаем эту запись (та же ссылка); nil — новая ссылка
-	dir           string             // временная папка страниц
-	run           *runState          // флаг этой выгрузки: сверка записи с OnSaved
-	pages         []export.WebPage   // готовые страницы и их манифест (первой подготовки): для keep (159)
+	base          *prefs.ProjectRecord // продолжаем эту запись (та же ссылка); nil — новая ссылка
+	moved         bool                 // «Обновить этот альбом» с другого пути (167-18): 404 — остановка, не новая ссылка
+	dir           string               // временная папка страниц
+	run           *runState            // флаг этой выгрузки: сверка записи с OnSaved
+	pages         []export.WebPage     // готовые страницы и их манифест (первой подготовки): для keep (159)
 	man           *albums.Manifest
 }
 
@@ -69,11 +70,11 @@ func (s *Service) Share(o Options) (bool, error) {
 		return false, err
 	}
 	j := &job{Job: snap, origin: origin, token: token, run: run}
-	rec, had, foreign := s.get(snap.Path, ownUID(snap)) // чужая запись (T4-9): ни названия, ни пароля из неё
-	if err := s.options(j, o, rec, had); err != nil {
+	rec, had, own, kind, fresh, err := s.decide(j, o)
+	if err != nil {
 		return false, err
 	}
-	if ok, err := s.askLink(j, rec, had, foreign); !ok || err != nil {
+	if ok, err := s.askLink(j, rec, had, own, kind); !ok || err != nil {
 		return false, err
 	}
 	if snap.Questions != nil {
@@ -83,9 +84,11 @@ func (s *Service) Share(o Options) (bool, error) {
 			}
 		}
 	}
-	// Отпечаток — в файл до первой записи о ссылке: иначе после перезапуска альбом до 0.32 получил
-	// бы новый, и своя запись стала бы чужой (T4-9). Печать не этого пути — новый отпечаток.
-	if j.UID, err = s.h.Pin(snap.Path, snap.UID); err != nil {
+	if j.moved && !s.sameRecord(snap, rec) { // выбор «обновить» относится к альбому и записи, что видел фотограф
+		return false, fail(changedText)
+	}
+	// Отпечаток — в файл до первой записи о ссылке (альбом до 0.32); «как новый» — новый отпечаток.
+	if j.UID, err = s.h.Pin(snap.Path, snap.UID, fresh); err != nil {
 		return false, fail("Не удалось записать альбом перед выгрузкой: " + err.Error())
 	}
 	if j.dir, err = s.tempDir(); err != nil {
@@ -120,8 +123,9 @@ func (s *Service) begin() (*runState, error) {
 	s.mu.Lock()
 	switch {
 	case s.net:
+		text := s.netText
 		s.mu.Unlock()
-		return nil, fail(netBusyText)
+		return nil, fail(text)
 	case s.run != nil:
 		other := s.otherLocked(path)
 		s.mu.Unlock()
@@ -136,7 +140,11 @@ func (s *Service) begin() (*runState, error) {
 	return run, nil
 }
 
-const netBusyText = "Идёт изменение ссылки — дождитесь его конца"
+// Отказы выгрузке, пока флаг net у правки ссылки и у поиска альбома (holdNet).
+const (
+	netBusyText  = "Идёт изменение ссылки — дождитесь его конца"
+	findBusyText = "Идёт поиск альбома на сервисе — дождитесь его конца"
+)
 
 // otherAlbum — идущая выгрузка не альбома path.
 func (s *Service) otherAlbum(path string) bool {
@@ -152,18 +160,19 @@ func (s *Service) otherLocked(path string) bool {
 
 // holdNet занимает флаг правки или отзыва ссылки альбома path: пока он стоит, Share не стартует,
 // и его последний put не перетрёт запись, которую меняет Change (или не воскресит отозванную);
-// OnSaved по path ставит netStop. Выгрузка идёт — отказ. Вызывающий отпускает флаг через release.
-func (s *Service) holdNet(path string) (release func(), err error) {
+// OnSaved по path ставит netStop. Выгрузка идёт — отказ. text — что ответит Share, пока флаг стоит
+// (правка и поиск называются по-разному). Вызывающий отпускает флаг через release.
+func (s *Service) holdNet(path, text string) (release func(), err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
 	case s.run != nil:
 		return nil, fail("Идёт выгрузка — дождитесь её конца")
 	case s.net:
-		return nil, fail(netBusyText)
+		return nil, fail(s.netText)
 	}
-	s.net, s.netPath, s.netStop = true, path, false
-	return func() { s.mu.Lock(); s.net, s.netPath, s.netStop = false, "", false; s.mu.Unlock() }, nil
+	s.net, s.netPath, s.netStop, s.netText = true, path, false, text
+	return func() { s.mu.Lock(); s.net, s.netPath, s.netStop, s.netText = false, "", false, ""; s.mu.Unlock() }, nil
 }
 
 // end снимает флаг выгрузки, если он ещё принадлежит run (после события share:done флаг может
@@ -176,23 +185,98 @@ func (s *Service) end(run *runState) {
 	s.mu.Unlock()
 }
 
+// decide — что делает выгрузка с записью проекта: поиск до вопросов, новая ссылка или продолжение,
+// проверка выбора окна (167-8, 167-12, 167-16). fresh — Pin выдаст новый отпечаток.
+func (s *Service) decide(j *job, o Options) (rec prefs.ProjectRecord, had, own bool, kind share.Kind, fresh bool, err error) {
+	snap := j.Job
+	_, had, own, kind = s.classify(snap, j.origin)
+	if fresh, err = s.searchFirst(snap, j.origin, j.token, had, own, kind); err != nil {
+		return rec, had, own, kind, false, err
+	}
+	rec, had, own, kind = s.classify(snap, j.origin) // поиск мог обновить свою запись (167-19)
+	// Новая ссылка с новым отпечатком: поиск не нашёл прежний альбом (167-17), запись другого сервиса
+	// или та, что не живёт на сервере, с другого пути (167-12), «выгрузить как новый» на moved (167-16).
+	fresh = fresh || had && !own && kind != stateMoved || kind == stateMoved && o.Choice == choiceNew
+	return rec, had, own, kind, fresh, s.choose(j, o, rec, had, own, kind)
+}
+
+// Значения Options.Choice.
+const (
+	choiceUpdate = "update"
+	choiceNew    = "new"
+)
+
+// changedText — альбом или его запись сменились между выбором и стартом.
+const changedText = "Альбом сменился — начните выгрузку ещё раз"
+
+// sameRecord — запись проекта снимка всё та же (тот же альбом на сервисе).
+func (s *Service) sameRecord(snap share.Job, rec prefs.ProjectRecord) bool {
+	path, uid := s.h.Ident()
+	cur, had := s.look(snap.UID)
+	return s.h.Fold(path) == s.h.Fold(snap.Path) && uid == snap.UID && had && cur.ID == rec.ID
+}
+
+// searchFirst — «Выгрузить» с привязками в файле и без поиска ищет сам до вопросов (167-8): нашёлся —
+// отказ «выберите в окне»; не нашёлся или поиск не удался — fresh: выгрузка с новым отпечатком
+// (167-17). Нужен проекту без записи, у своей записи — только при истёкшем сроке (167-19).
+func (s *Service) searchFirst(snap share.Job, origin, token string, had, own bool, kind share.Kind) (fresh bool, err error) {
+	if len(snap.Refs) == 0 {
+		return false, nil
+	}
+	need, _ := s.findView(snap.UID, had, own, kind)
+	st, searched := s.findOf(snap.UID)
+	if need == findNeed {
+		if st, err = s.search(snap, origin, token); err != nil {
+			return false, err
+		}
+		searched = true
+		s.setFind(snap.UID, st)
+		if _, again := s.look(snap.UID); again && !had { // нашёлся: окно спросит «обновить или как новый»
+			return false, fail("Этот альбом уже выгружен — выберите в окне: обновить его или выгрузить как новый")
+		}
+	}
+	return !had && searched && (st.kind == findLost || st.kind == findFail), nil
+}
+
+// choose проверяет выбор окна и заполняет задание: название, пароль, срок и режим (167-16).
+// choice допустим только на moved: на своей записи «как новый» молча бросил бы живую ссылку.
+func (s *Service) choose(j *job, o Options, rec prefs.ProjectRecord, had, own bool, kind share.Kind) error {
+	switch {
+	case kind == stateMoved && o.Choice != choiceUpdate && o.Choice != choiceNew:
+		return fail(chooseText)
+	case kind != stateMoved && o.Choice != "":
+		return fail("Выбор «обновить или выгрузить как новый» нужен только для перенесённого файла")
+	}
+	use := had && (own || o.Choice == choiceUpdate) // чужая запись не даёт ни названия, ни пароля
+	if err := s.options(j, o, rec, use); err != nil {
+		return err
+	}
+	if o.Choice == choiceUpdate {
+		j.moved = true
+	}
+	return nil
+}
+
 // options проверяет выбор окна и дополняет его записью: название, пароль и срок обновления.
-func (s *Service) options(j *job, o Options, rec prefs.ShareRecord, had bool) error {
+// Запись (use) — своя или выбранная для обновления; чужая сюда не приходит (167-12).
+func (s *Service) options(j *job, o Options, rec prefs.ProjectRecord, use bool) error {
 	if o.Days != 0 && !validDays[o.Days] {
 		return fail("Срок ссылки: месяц, 3 месяца или год")
 	}
 	j.title, j.password, j.days = strings.TrimSpace(o.Title), o.Password, o.Days
-	if o.Days == 0 && had { // продолжить / обновить с параметрами записи: поля окна игнорируются (T5-6)
-		j.title, j.password = rec.Title, rec.Password
-	}
-	if j.title == "" {
-		j.title = j.Title
-		if had {
-			j.title = rec.Title
+	if use {
+		recTitle := s.titleFor(rec, j.Job)
+		if o.Days == 0 { // продолжить / обновить с параметрами записи: поля окна игнорируются (T5-6)
+			j.title, j.password = recTitle, rec.Password
 		}
-	}
-	if had && rec.Origin == j.origin && !rec.Gone && o.Password == "" {
-		j.password = rec.Password // «Обновить по ссылке» не снимает пароль; снять — Change
+		if j.title == "" {
+			j.title = recTitle
+		}
+		if rec.Origin == j.origin && !rec.Gone && o.Password == "" {
+			j.password = rec.Password // «Обновить по ссылке» не снимает пароль; снять — Change
+		}
+	} else if j.title == "" {
+		j.title = j.Title
 	}
 	if j.password != "" {
 		if err := share.CheckPassword(j.password); err != nil {
@@ -202,33 +286,37 @@ func (s *Service) options(j *job, o Options, rec prefs.ShareRecord, had bool) er
 	return nil
 }
 
+// titleFor — название обновляемого альбома (167-7): было именем файла — теперь имя этого файла,
+// введённое руками остаётся прежним. У записи без пути (найдена на сервисе) «имя файла» — название
+// задания.
+func (s *Service) titleFor(rec prefs.ProjectRecord, job share.Job) string {
+	clean := func(t string) string { return share.CleanTitle(t, 0) }
+	if rec.TitleAuto(clean) || rec.Path == "" && rec.TitleIs(job.Title, clean) {
+		return job.Title
+	}
+	return rec.Title
+}
+
 // askLink решает, продолжать ли прежнюю запись. Запись другого сервиса или та, что уже не живёт
 // на сервере (срок прошёл, отозвана, 404), — только новой ссылкой и только после вопроса; запросы по
-// чужой записи не идут (С2). Запись другого проекта на этом пути (foreign, T4-9) — тоже новая
-// ссылка после вопроса. Нет записи — новая ссылка без вопроса.
-func (s *Service) askLink(j *job, rec prefs.ShareRecord, had, foreign bool) (bool, error) {
-	if !had {
-		if err := needDays(j); err != nil || !foreign {
-			return err == nil, err
-		}
-		return s.h.Ask(foreignQuestion)
-	}
+// чужой записи не идут (С2). moved: вопрос уже задан окном (167-5) — «обновить» продолжает прежний
+// альбом, «как новый» — новая ссылка. Нет записи — новая ссылка без вопроса.
+func (s *Service) askLink(j *job, rec prefs.ProjectRecord, had, own bool, kind share.Kind) (bool, error) {
 	var q string
-	k := share.State(toRecord(rec), j.origin, j.Scene, s.now())
-	if k == share.StateNone && rec.ID != "" && rec.Origin != j.origin {
-		k = share.StateOther // id без ссылки на старом сервисе: State даёт «нет ссылки», но продолжать её нельзя (T4-7)
-	}
-	switch k {
-	case share.StateOther:
+	switch {
+	case kind == stateMoved && j.moved:
+		j.base = &rec
+		return true, nil
+	case kind == share.StateOther:
 		q = fmt.Sprintf("Альбом уже выгружен на другой сервис (%s). Выгрузить на %s с новой ссылкой? "+lostLink, hostOf(rec.Origin), hostOf(j.origin))
-	case share.StateExpired, share.StateGone:
+	case kind == share.StateExpired || kind == share.StateGone:
 		q = goneQuestion
-	default:
+	case had && own:
 		j.base = &rec
 		return true, nil
 	}
-	if err := needDays(j); err != nil {
-		return false, err
+	if err := needDays(j); err != nil || q == "" {
+		return err == nil, err
 	}
 	return s.h.Ask(q)
 }
@@ -245,15 +333,13 @@ func needDays(j *job) error {
 // ссылка на сервере живёт до своего срока.
 const lostLink = "Прежняя ссылка будет работать до конца срока, но программа перестанет её показывать и не сможет отозвать."
 
-const foreignQuestion = "Ссылка, записанная у этого файла, принадлежит другому альбому (файл заменён или восстановлен из копии). Выгрузить этот альбом с новой ссылкой? " + lostLink
-
 const goneQuestion = "Прежней ссылки больше нет на сервере (истёк срок или её отозвали). Выгрузить с новой ссылкой?"
 
 // OnSaved — альбом сохранён по пути path (вызывает App после записи). newProject — по этому пути
 // записан другой проект («Сохранить как» поверх файла, первое сохранение нового альбома поверх
-// существующего): запись о выгрузке пути сбрасывается, это новая публикация (разбор С1; иначе
-// «Обновить по ссылке» залил бы фото нового клиента в ссылку прежнего). Идущая выгрузка этого
-// пути останавливается.
+// существующего): идущая выгрузка и правка этого пути останавливаются, сохранённые страницы
+// сбрасываются. Записи о ссылках не стираются (167-10): они по uid, другой проект на пути имеет
+// другой uid, а запись прежнего проекта к файлу с другим uid не относится.
 func (s *Service) OnSaved(path string, newProject bool) {
 	if !newProject || path == "" {
 		return
@@ -272,9 +358,6 @@ func (s *Service) OnSaved(path string, newProject bool) {
 		cancel()
 	}
 	s.dropKeptFor(path) // страницы прежнего проекта не годятся новому (159)
-	if err := s.drop(path); err != nil {
-		log.Printf("выгрузка: запись пути не сброшена при сохранении: %v", err)
-	}
 }
 
 // tempDir — новая папка страниц <кэш программы>/share/up-*, 0700. Нет абсолютной папки кэша —

@@ -29,6 +29,7 @@ const rect = { x: 0, y: 0, w: 100, h: 100 }
 const sp = (id: string, photos: string[]) => ({ id, name: '', photos, rects: photos.map(() => rect), w: 400, h: 200, kind: '' })
 
 beforeEach(() => {
+  window.dispatchEvent(new Event('blur')) // модульный «последний Ctrl» между тестами не переносим
   cutKey.held = false
   naming.stop()
   prefs.level = 'full'

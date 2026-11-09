@@ -97,7 +97,7 @@ func TestAlbumKeepsFonts(t *testing.T) {
 	p := model.New()
 	p.Fonts = map[string]model.FontRef{"my:aaaaaaaaaaaaaaaa": {Name: "Lato"}}
 	pl := Plan{Items: []Item{{Kind: KindFont, Src: filepath.Join(out, "x.ttf"), Rel: DirFonts + "/Lato-Regular.ttf", ModTime: time.Now()}}}
-	q, _ := Album(p, model.Side{}, out, pl)
+	q, _ := Album(p, model.Side{}, out, pl, nil)
 	if len(q.Folders) != 0 || q.Fonts["my:aaaaaaaaaaaaaaaa"].Name != "Lato" {
 		t.Fatalf("собранный: папки %v, шрифты %v", q.Folders, q.Fonts)
 	}

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/IliaSA101/sosninaalbums/api/albums/albumstest"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -43,8 +44,8 @@ func TestShareChangeSavedDuringPatch(t *testing.T) {
 		if status != 0 && err == nil {
 			t.Fatalf("ответ %d без ошибки", status)
 		}
-		if rec, ok := r.svc.look(path); ok {
-			t.Fatalf("ответ %d: запись прежнего альбома вернулась: %+v", status, rec)
+		if rec, ok := r.svc.look(r.curJob().UID); !ok || rec.Gone || time.Until(rec.ExpiresAt) > 31*24*time.Hour {
+			t.Fatalf("ответ %d: поздняя запись правки легла: %+v", status, rec)
 		}
 		r.svc.mu.Lock()
 		net, stop := r.svc.net, r.svc.netStop
@@ -62,76 +63,17 @@ func (r *rig) restart() {
 	r.svc = s
 }
 
-// П.2: запись другого проекта на этом пути — окно без ссылки, «Обновить» (Days:0) — отказ,
-// новая ссылка — только после вопроса, запросов по чужой записи нет; «Да» — новая ссылка
-// с отпечатком текущего проекта, «Нет» — чужая запись цела.
+// Другой проект на том же пути (другой отпечаток) записи прежнего не видит: окно без ссылки, новая
+// ссылка без вопросов и без секретов прежней, запись прежнего цела (она по uid, 167-4).
 func TestShareForeignRecord(t *testing.T) {
-	for _, tc := range foreignCases {
-		t.Run(tc.name, func(t *testing.T) {
-			r := newRig(t)
-			r.connect()
-			r.must(Options{Days: 30})
-			old, _ := r.svc.look(r.curJob().Path)
-			if old.UID != r.curJob().UID {
-				t.Fatalf("оснастка: отпечаток записи %q", old.UID)
-			}
-			tc.swap(r)
-			foreignRefused(t, r, old.ID)
-			foreignNewLink(t, r, old.ID)
-		})
-	}
-}
-
-// foreignCases — как запись пути становится чужой текущему проекту.
-var foreignCases = []struct {
-	name string
-	swap func(r *rig)
-}{
-	{"файл заменён другим проектом", func(r *rig) {
-		j := r.curJob()
-		j.UID = uidOf("другой проект")
-		r.setJob(j)
-	}},
-	{"перезапуск, отпечаток в файле другой", func(r *rig) {
-		r.restart()
-		j := r.curJob()
-		j.UID = uidOf("после перезапуска")
-		r.setJob(j)
-	}},
-	{"печать не этого пути (копия шаблона, файл с другого пути)", func(r *rig) {
-		j := r.curJob() // отпечаток тот же, что в записи: чужой её делает только печать
-		j.Unsealed = true
-		r.setJob(j)
-		r.mu.Lock()
-		r.pinUID = uidOf("выдан при выгрузке")
-		r.mu.Unlock()
-	}},
-	{"запись без отпечатка", func(r *rig) {
-		rec, _ := r.svc.look(r.curJob().Path)
-		rec.UID = ""
-		if err := r.svc.put(r.curJob().Path, rec); err != nil {
-			r.t.Fatal(err)
-		}
-		r.restart()
-	}},
-	{"запись с негодным отпечатком", func(r *rig) {
-		p := prefs.SharesPath(r.cfg)
-		b, err := os.ReadFile(p)
-		if err != nil {
-			r.t.Fatal(err)
-		}
-		b = []byte(strings.Replace(string(b), r.curJob().UID, strings.ToUpper(r.curJob().UID), 1))
-		if err := os.WriteFile(p, b, 0o600); err != nil {
-			r.t.Fatal(err)
-		}
-		r.restart()
-	}},
-}
-
-// foreignRefused — по чужой записи ни ссылки в окне, ни правки, ни «Обновить»; «Нет» на вопрос
-// о новой ссылке — без запросов, запись цела.
-func foreignRefused(t *testing.T, r *rig, oldID string) {
-	t.Helper()
+	r := newRig(t)
+	r.connect()
+	r.must(Options{Days: 30, Password: "old-1234", Title: "Клиент А"})
+	old, _ := r.svc.look(r.curJob().UID)
+	a := r.curJob()
+	j := a
+	j.UID, j.Refs = uidOf("другой проект"), nil
+	r.setJob(j)
 	if v := r.state(); v.Link != nil {
 		t.Fatalf("окно показывает ссылку другого проекта: %+v", v.Link)
 	}
@@ -141,52 +83,19 @@ func foreignRefused(t *testing.T, r *rig, oldID string) {
 	if _, err := r.svc.Change(Change{Days: 90}); err == nil {
 		t.Error("правка ссылки другого проекта прошла")
 	}
-	h := &headerLog{}
-	r.setFault(h.fault)
 	if ok, err := r.svc.Share(Options{}); ok || err == nil {
-		t.Fatalf("Days:0 по чужой записи: %v %v", ok, err)
+		t.Fatalf("Days:0 без записи: %v %v", ok, err)
 	}
-	r.mu.Lock()
-	r.answer = false
-	pinsBefore := len(r.pins)
-	r.mu.Unlock()
-	if ok, err := r.svc.Share(Options{Days: 30}); ok || err != nil {
-		t.Fatalf("«Нет» на вопрос: %v %v", ok, err)
+	r.must(Options{Days: 30})
+	if len(r.asks) != 0 {
+		t.Errorf("вопросы: %q", r.asks)
 	}
-	if r.asks[len(r.asks)-1] != foreignQuestion {
-		t.Fatalf("вопрос: %q", r.asks[len(r.asks)-1])
+	got, ok := r.svc.look(j.UID)
+	if !ok || got.ID == old.ID || got.Password != "" || got.Title == "Клиент А" {
+		t.Fatalf("запись другого проекта: %+v", got)
 	}
-	if h.n != 0 {
-		t.Errorf("по чужой записи ушло %d запросов", h.n)
-	}
-	// «Нет» — до выдачи отпечатка: Pin переписывает файл альбома, а отказ не должен его трогать
-	r.mu.Lock()
-	pinned := len(r.pins) - pinsBefore
-	r.mu.Unlock()
-	if pinned != 0 {
-		t.Errorf("после «Нет» Pin вызван %d раз", pinned)
-	}
-	if rec, ok := r.svc.look(r.curJob().Path); !ok || rec.ID != oldID {
-		t.Fatalf("«Нет» тронуло запись: %+v %v", rec, ok)
-	}
-	r.setFault(nil)
-}
-
-// foreignNewLink — «Да»: новая ссылка с отпечатком текущего проекта.
-func foreignNewLink(t *testing.T, r *rig, oldID string) {
-	t.Helper()
-	r.mu.Lock()
-	r.answer = true
-	r.mu.Unlock()
-	if msg, stopped := r.run(Options{Days: 30}); msg != "" || stopped {
-		t.Fatalf("новая ссылка: %q %v", msg, stopped)
-	}
-	rec, ok := r.svc.look(r.curJob().Path)
-	if !ok || rec.ID == oldID || rec.UID != r.curJob().UID {
-		t.Fatalf("запись после новой ссылки: %+v (прежний id %s)", rec, oldID)
-	}
-	if v := r.state(); v.Link == nil || v.Link.State != "ok" {
-		t.Errorf("новая ссылка не видна: %+v", v.Link)
+	if again, ok := r.svc.look(a.UID); !ok || again.ID != old.ID {
+		t.Fatalf("запись прежнего проекта тронута: %+v", again)
 	}
 }
 
@@ -223,27 +132,29 @@ func TestSharePinFails(t *testing.T) {
 	}
 }
 
-// П.3: записи, что не стёрлись (shares.json не пишется), стираются повтором: look — своя,
+// П.3: записи, что не стёрлись (projects.json не пишется), стираются повтором: look — своя,
 // удачный putIf — все сразу.
 func TestShareDelRetried(t *testing.T) {
 	r := newRig(t)
 	r.connect()
 	dir := filepath.Dir(r.curJob().Path)
-	var list []string
+	var list []string // отпечатки
 	for i, name := range []string{"a.salbum", "b.salbum", "c.salbum"} {
 		r.setJob(testJob(t, filepath.Join(dir, name), 1, uint8(i)))
 		r.must(Options{Days: 30})
-		list = append(list, r.curJob().Path)
+		list = append(list, r.curJob().UID)
 	}
 	keep, _ := r.svc.look(list[0])
-	file := prefs.SharesPath(r.cfg)
+	file := prefs.ProjectsPath(r.cfg)
 	saved, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
 	freezeShares(t, r.cfg)
-	for _, p := range list {
-		r.svc.OnSaved(p, true)
+	for _, u := range list {
+		if r.svc.drop(u) == nil {
+			t.Fatal("оснастка: стирание в замороженном файле прошло")
+		}
 	}
 	r.svc.mu.Lock()
 	n := len(r.svc.del)
@@ -254,8 +165,8 @@ func TestShareDelRetried(t *testing.T) {
 	if err := os.WriteFile(file, saved, 0o600); err != nil { // диск снова пишется
 		t.Fatal(err)
 	}
-	onDisk := func(p string) bool {
-		_, ok := prefs.NewShares(r.cfg, r.svc.rules()).Get(p)
+	onDisk := func(u string) bool {
+		_, ok := prefs.NewProjects(r.cfg, r.svc.rules()).Get(u)
 		return ok
 	}
 	if _, ok := r.svc.look(list[0]); ok || onDisk(list[0]) {
@@ -267,7 +178,7 @@ func TestShareDelRetried(t *testing.T) {
 	if n != len(list)-1 || !onDisk(list[1]) {
 		t.Fatalf("look тронул чужие метки: %d, b на диске %v", n, onDisk(list[1]))
 	}
-	other := filepath.Join(dir, "d.salbum")
+	other := uidOf("d.salbum")
 	if wrote, err := r.svc.putIf(other, keep, func() bool { return true }); !wrote || err != nil {
 		t.Fatalf("putIf: %v %v", wrote, err)
 	}

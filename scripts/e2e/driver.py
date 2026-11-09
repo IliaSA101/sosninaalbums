@@ -18,8 +18,27 @@ from typing import Any, Callable
 
 from common import Profile, PROFILES, Refuse
 
-# Консольные сообщения «не наше» (docs/QA.md): оверлей wails dev в браузере и проверка Vite через blob-воркер.
-NOT_OURS = ("reading 'nodes'", "violates the following Content Security Policy", "Creating a worker from 'blob:")
+# Консольные сообщения «не наше» (docs/QA.md): проверка Vite через blob-воркер.
+NOT_OURS = ("violates the following Content Security Policy", "Creating a worker from 'blob:")
+# Оверлей wails dev для браузера (Svelte внутри /wails/ipc.js) падает на null.nodes — не наше, но только со стеком
+# этого файла: та же ошибка из нашего кода (другой стек) остаётся провалом (владелец 07.11).
+WAILS_OVERLAY = ("reading 'nodes'", "/wails/ipc.js")
+
+
+def not_ours(x: str) -> bool:
+    return any(s in x for s in NOT_OURS) or all(s in x for s in WAILS_OVERLAY)
+
+
+def console_text(m) -> str:
+    """Текст консоли; у ошибки — адрес источника (`текст @ url`), чтобы not_ours узнал оверлей."""
+    url = (m.location or {}).get("url") if m.type == "error" else None
+    return f"{m.text} @ {url}" if url else m.text
+
+
+def page_error(e) -> str:
+    """Сообщение и стек: по стеку отличаем оверлей wails dev от нашего кода."""
+    return f"{e.message}\n{e.stack}" if getattr(e, "stack", None) else str(e)
+
 
 # Подписки страницы ставятся до скриптов приложения: длинные задачи с первой секунды.
 INIT_JS = """
@@ -173,8 +192,8 @@ class Stand:
         for js in self.init_scripts:
             self.ctx.add_init_script(js)
         self.page = self.ctx.new_page()
-        self.page.on("console", lambda m: self.console.append((m.type, m.text)) if m.type in ("error", "warning") else None)
-        self.page.on("pageerror", lambda e: self.console.append(("pageerror", str(e))))
+        self.page.on("console", lambda m: self.console.append((m.type, console_text(m))) if m.type in ("error", "warning") else None)
+        self.page.on("pageerror", lambda e: self.console.append(("pageerror", page_error(e))))
         self.page.on("dialog", lambda d: d.dismiss())
         # Консоль пишет «Failed to load resource» без адреса: адрес (путь без строки запроса) — в отдельную строку.
         self.page.on("response", lambda r: self.failed.append((r.status, r.url.split("?")[0].split("localhost:")[-1])) if r.status >= 400 else None)
@@ -365,7 +384,7 @@ class Stand:
     # ---- консоль ----
 
     def console_problems(self) -> list[str]:
-        return [f"{t}: {x}" for t, x in self.console if t != MARK and not any(s in x for s in NOT_OURS)]
+        return [f"{t}: {x}" for t, x in self.console if t != MARK and not not_ours(x)]
 
     def write_console(self) -> None:
         lines = [f"== {x}" if t == MARK else f"{t}: {x}" for t, x in self.console]

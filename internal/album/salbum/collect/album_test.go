@@ -74,7 +74,7 @@ func newScene(t *testing.T) *scene {
 			Stickers: []*model.Sticker{{ID: "0123456789a3", Photo: ownID, X: 10, Y: 10, W: 30, H: 30}}},
 		{ID: "0123456789a4", Photos: []string{id(sc.gone)}},
 	}
-	p.UID = model.NewUID() // исходный с отпечатком: у копии должен быть другой (newUID)
+	p.UID = model.NewUID() // исходный с отпечатком: у копии он тот же (sameUID, 167-9)
 	src := filepath.Join(root, "Альбом", "Иванов.salbum")
 	if err := salbum.Save(p, src); err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func collectTo(t *testing.T, sc *scene, dir string, all bool) (Plan, string) {
 	if _, err := Copy(context.Background(), dir, &pl, nil); err != nil {
 		t.Fatal(err)
 	}
-	q, marks := Album(sc.p, model.Side{Marks: sc.marks}, dir, pl)
+	q, marks := Album(sc.p, model.Side{Marks: sc.marks}, dir, pl, nil)
 	path := filepath.Join(dir, "Иванов.salbum")
 	if err := Save(q, marks, path, pl); err != nil {
 		t.Fatal(err)
@@ -131,11 +131,11 @@ func collectTo(t *testing.T, sc *scene, dir string, all bool) (Plan, string) {
 
 // canon — альбом без путей: ID записей — по содержимому файла (пропавшее — по пути), пути,
 // размеры и ключи библиотеки сняты. Одинаковый canon — тот же вид альбома.
-// newUID — у собранной копии свой годный отпечаток, не исходного альбома, с печатью её пути path:
-// сбор выдаёт отпечаток (146 T4-9).
-func newUID(t *testing.T, got, src *model.Project, path string) {
+// sameUID — у собранной копии тот же годный отпечаток, что у исходного альбома (167-9: сбор — способ
+// перенести проект), с печатью её пути path (146 T4-9).
+func sameUID(t *testing.T, got, src *model.Project, path string) {
 	t.Helper()
-	if !model.GoodUID(got.UID) || got.UID == src.UID {
+	if !model.GoodUID(got.UID) || got.UID != src.UID {
 		t.Fatalf("отпечаток копии %q, исходного %q", got.UID, src.UID)
 	}
 	if !got.Sealed(path) {
@@ -167,7 +167,7 @@ func canon(t *testing.T, p *model.Project) string {
 	c.Folders, c.FolderAlt = nil, nil
 	c.SpreadGuide, c.SpreadGuideAlt = "", ""
 	c.Cover.Guide, c.Cover.GuideAlt = "", ""
-	c.UID = "" // у собранной копии отпечаток новый (146 T4-9) — проверка отдельно, newUID
+	c.UID = "" // отпечаток сверяет sameUID отдельно
 	return string(model.Marshal(c))
 }
 
@@ -218,7 +218,7 @@ func TestCollectRoundtrip(t *testing.T) {
 	if got, want := canon(t, lp), canon(t, sc.p); got != want {
 		t.Fatalf("вид альбома изменился:\n%s\n%s", got, want)
 	}
-	newUID(t, lp, sc.p, path)
+	sameUID(t, lp, sc.p, path)
 	if lp.SpreadGuide != filepath.Join(dir, "Разметка", "spreads.psd") || lp.Cover == nil || lp.Cover.Guide != filepath.Join(dir, "Разметка", "cover.png") {
 		t.Fatalf("разметки: %q, %+v", lp.SpreadGuide, lp.Cover)
 	}
@@ -267,7 +267,7 @@ func TestCollectMovedFolder(t *testing.T) {
 	if got, want := canon(t, lp), canon(t, sc.p); got != want {
 		t.Fatalf("вид после переноса:\n%s\n%s", got, want)
 	}
-	newUID(t, lp, sc.p, filepath.Join(dir, "Иванов.salbum")) // печать — пути сбора: перенос её не меняет
+	sameUID(t, lp, sc.p, filepath.Join(dir, "Иванов.salbum")) // печать — пути сбора: перенос её не меняет
 	// «Все фото»: отметка фото ленты вне альбома переехала вместе с ним.
 	unused := filepath.Join(moved, "Фото", "JPG", "unused.jpg")
 	if m, ok := edtest.Loaded(lp).Marks[library.IDFor(unused)]; !ok || m.Path != unused {
@@ -344,7 +344,7 @@ func TestCollectEmpty(t *testing.T) {
 	if n, err := Copy(context.Background(), dir, &pl, nil); err != nil || n != 0 {
 		t.Fatalf("Copy пустого: %d, %v", n, err)
 	}
-	q, marks := Album(p, model.Side{}, dir, pl)
+	q, marks := Album(p, model.Side{}, dir, pl, nil)
 	if q.Folders != nil || len(marks.Marks) != 0 {
 		t.Fatalf("папки %v, отметки %v", q.Folders, marks)
 	}
@@ -385,7 +385,7 @@ func TestCollectLooseAlbumOnly(t *testing.T) {
 	if _, err := Copy(context.Background(), dir, &pl, nil); err != nil {
 		t.Fatal(err)
 	}
-	q, marks := Album(p, model.Side{}, dir, pl)
+	q, marks := Album(p, model.Side{}, dir, pl, nil)
 	if q.Folders != nil {
 		t.Fatalf("папки: %v", q.Folders)
 	}
@@ -420,7 +420,7 @@ func TestCollectSaveCatchesLost(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "Фото", "Прочие", "x.jpg")); err != nil {
 		t.Fatal(err)
 	}
-	q, marks := Album(sc.p, model.Side{Marks: sc.marks}, dir, pl)
+	q, marks := Album(sc.p, model.Side{Marks: sc.marks}, dir, pl, nil)
 	if err := Save(q, marks, filepath.Join(dir, "Иванов.salbum"), pl); err == nil || !strings.Contains(err.Error(), "не нашлось фото: 1") {
 		t.Fatalf("Save без файла: %v", err)
 	}

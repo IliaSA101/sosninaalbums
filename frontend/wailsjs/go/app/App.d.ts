@@ -301,6 +301,8 @@ export function MyColors():Promise<Array<string>>;
 
 export function NewBin(arg1:string,arg2:Array<string>):Promise<model.View>;
 
+export function NewFromTemplate():Promise<app.State>;
+
 export function NewLookSpread():Promise<model.View>;
 
 export function NewProject(arg1:string):Promise<app.State>;
@@ -588,6 +590,8 @@ export function Share(arg1:app.ShareOptions):Promise<boolean>;
 export function ShareChange(arg1:app.ShareChange):Promise<app.ShareView>;
 
 export function ShareConnect(arg1:string,arg2:string):Promise<app.ShareView>;
+
+export function ShareFind():Promise<app.ShareView>;
 
 export function ShareForget():Promise<app.ShareView>;
 

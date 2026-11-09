@@ -31,6 +31,13 @@ const SCREEN: Record<Scenario, string> = {
   other: 'other',
   unsaved: 'blocked',
   busyOther: 'busyOther',
+  moved: 'moved',
+  movedElsewhere: 'moved',
+  find: 'find',
+  lost: 'form', // не нашли: форма со строкой «будет новая ссылка» (ShareDialog)
+  fail: 'form', // сбой поиска: ошибка, «Повторить» и та же форма
+  expiredForeign: 'expired',
+  otherForeign: 'other',
 }
 
 describe('экран по состоянию Go (design §3.4)', () => {
@@ -38,6 +45,19 @@ describe('экран по состоянию Go (design §3.4)', () => {
     it(`${kind} → ${screen}`, () => {
       expect(screenOf(stubView(kind as Scenario))).toBe(screen)
     })
+
+  it('moved: ссылку можно показать без подключения, поиск — только при подключении и ответе need', () => {
+    const v = stubView('moved')
+    expect(hasLink(v)).toBe(true)
+    v.service.token = false
+    expect(screenOf(v)).toBe('connect')
+    const f = stubView('find')
+    f.service.token = false
+    expect(screenOf(f)).toBe('connect') // без токена искать нечем
+    f.service.token = true
+    f.busy = true
+    expect(screenOf(f)).toBe('run') // ход важнее поиска
+  })
 
   it('нет токена при имени сервера — подключение; ссылка без подключения только показывается', () => {
     const v: ShareView = stubView('published')
@@ -181,6 +201,10 @@ describe('тост после «Изменить» и «Продлить» (159-
     expect(changeToast(pass('лето-1'), link(''), link('лето-1'))).toBe('Пароль задан — альбом открывается только по нему')
     expect(changeToast(pass('лето-2'), link('лето-1'), link('лето-2'))).toBe('Пароль изменён — прежние входы клиента сброшены')
     expect(changeToast(pass(''), link('лето-1'), link(''))).toBe('Пароль снят — альбом открывается по ссылке без пароля')
+  })
+  it('пароль задан на другом компьютере (167): новый — «изменён», а не «задан впервые»', () => {
+    const was = { ...link(''), passwordUnknown: true }
+    expect(changeToast(pass('лето-2'), was, link('лето-2'))).toBe('Пароль изменён — прежние входы клиента сброшены')
   })
   it('срок: тост с готовой строкой Go, без второго «до»; короче прежнего и в тот же день — тот же текст', () => {
     const a = changeToast(term(90), link('x', 'до 1 января 2027'), link('x', 'до 3 декабря 2026'))

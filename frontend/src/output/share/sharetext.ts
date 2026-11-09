@@ -56,7 +56,9 @@ export const EXTEND_NOTE = 'Срок считается от сегодня.'
 export const REVOKE_LABEL = 'Отозвать ссылку'
 export const CHANGED_LINE = 'Альбом изменён после выгрузки'
 export const UPDATE_LABEL = 'Обновить по ссылке'
-export const passwordLine = (p: string): string => (p ? `Пароль: ${p}` : NO_PASSWORD)
+export const PASSWORD_ELSEWHERE = 'Пароль задан на другом компьютере'
+// Пароль не известен этому компьютеру (альбом найден на сервисе, 167): сервис пароль не отдаёт; «Изменить» задаёт новый.
+export const passwordLine = (p: string, unknown = false): string => (p ? `Пароль: ${p}` : unknown ? PASSWORD_ELSEWHERE : NO_PASSWORD)
 export const termLine = (until: string): string => `Срок: ${until}`
 export const otherLine = (host: string): string => `Ссылка выгружена на ${host}. Чтобы править её, подключите ${host}.`
 
@@ -66,6 +68,22 @@ export const CONTINUE_LABEL = 'Продолжить'
 export const EXPIRED_LINE = 'Срок истёк — альбом удалён с сервера'
 export const GONE_LINE = 'Ссылку отозвали или она истекла — альбом удалён с сервера'
 export const AGAIN_LABEL = 'Выгрузить заново'
+
+// Альбом уже выгружали с другого пути или компьютера (167): вопрос «обновить или как новый» (экран moved)
+export const MOVED_ASK = 'Обновить этот альбом или выгрузить как новый?'
+// Название прежней выгрузки отдаёт Go (ShareLink.publishedTitle): у чужой записи title пуст (167-12). Нет названия — текст без имени.
+export const movedUpdateNote = (title: string): string =>
+  `Обновить — страницы альбома${title ? ` «${title}»` : ''} у клиента заменятся страницами этого файла.`
+export const MOVED_NEW_NOTE =
+  'Как новый — прежняя ссылка останется у прежнего файла; если его больше нет, программа не сможет её показать и отозвать.'
+export const NEW_ALBUM_LABEL = 'Выгрузить как новый'
+export const UPDATE_ALBUM_LABEL = 'Обновить этот альбом'
+
+// Поиск прежнего альбома на сервисе (167)
+export const FIND_LINE = 'Альбом уже выгружали — ищем его на сервисе…'
+export const FIND_LOST_LINE = 'Прежний альбом на сервисе не найден — будет новая ссылка'
+export const FIND_NEW_LINE = 'Будет новая ссылка'
+export const RETRY_LABEL = 'Повторить'
 
 // Тосты
 export const DONE_TOAST = 'Ссылка готова'

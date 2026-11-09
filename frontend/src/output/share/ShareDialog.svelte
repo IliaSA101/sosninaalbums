@@ -4,8 +4,10 @@
   import Modal from '../../base/modal/Modal.svelte'
   import { store } from '../../base/core/store.svelte'
   import ShareConnect from './ShareConnect.svelte'
+  import ShareFind from './ShareFind.svelte'
   import ShareForm from './ShareForm.svelte'
   import ShareLink from './ShareLink.svelte'
+  import ShareMoved from './ShareMoved.svelte'
   import ShareRun from './ShareRun.svelte'
   import { share } from './share.svelte'
   import { hasLink, loadDays, screenOf } from './share'
@@ -17,9 +19,13 @@
     CLOSE_LABEL,
     CONTINUE_LABEL,
     EXPIRED_LINE,
+    FIND_LINE,
+    FIND_LOST_LINE,
+    FIND_NEW_LINE,
     FORGET_LABEL,
     GONE_LINE,
     INCOMPLETE_LINE,
+    RETRY_LABEL,
     SAVE_LABEL,
     SESSION_NOTE,
     WAIT_LINE,
@@ -56,11 +62,18 @@
   // «Продолжить»: только days 0 — название, пароль и срок служба берёт из записи (у недоделанной выгрузки пароль в записи мог ещё не появиться, T5-6).
   const resume = () => share.start({ days: 0 })
   // «Выгрузить заново» после срока: новая ссылка с названием и паролем записи (она опубликована, пароль настоящий), срок — из последнего выбора.
-  const again = () => link && share.start({ title: link.title, password: link.password, days: loadDays(v?.service.days) })
-  // Ссылка другого сервиса: «Выгрузить заново» открывает форму (название и пароль записи), вопрос «будет новая ссылка» задаёт Go (T5-8).
+  // Не своя запись (167-12): название и пароль прежнего клиента не шлём — пустые, Go возьмёт имя файла.
+  const again = () =>
+    link && share.start({ title: link.own ? link.title : '', password: link.own ? link.password : '', days: loadDays(v?.service.days) })
+  // Ссылка другого сервиса: «Выгрузить заново» открывает форму (название и пароль своей записи), вопрос «будет новая ссылка» задаёт Go (T5-8).
   let redo = $state(false)
   $effect(() => {
     if (screen !== 'other') redo = false
+  })
+  // «Выгрузить как новый» на экране moved (167): форма без названия и пароля прежнего клиента; «Отмена» — назад к вопросу.
+  let asNew = $state(false)
+  $effect(() => {
+    if (screen !== 'moved') asNew = false
   })
 </script>
 
@@ -98,9 +111,17 @@
       {:else if screen === 'connect'}
         {#if link && hasLink(v)}<ShareLink {link} readonly />{/if}
         <ShareConnect quiet={!!link && hasLink(v)} />
+      {:else if screen === 'find'}
+        <ShareFind />
+      {:else if screen === 'moved' && link}
+        {#if asNew}
+          <ShareForm choice="new" oncancel={() => (asNew = false)} />
+        {:else}
+          <ShareMoved {link} onnew={() => (asNew = true)} />
+        {/if}
       {:else if screen === 'other' && link}
         {#if redo}
-          <ShareForm title={link.title} password={link.password} oncancel={() => (redo = false)} />
+          <ShareForm title={link.own ? link.title : undefined} password={link.own ? link.password : ''} oncancel={() => (redo = false)} />
         {:else}
           {#if hasLink(v)}<ShareLink {link} readonly />{/if}
           <p class="note">{otherLine(link.host)}</p>
@@ -124,6 +145,18 @@
       {:else if screen === 'link' && link}
         <ShareLink {link} />
       {:else if screen === 'form'}
+        <!-- Поиск не нашёл или не удался (167): выгрузка без прежнего альбома — новая ссылка -->
+        {#if v.album.find === 'lost'}
+          <p class="note" role="status">{FIND_LOST_LINE}</p>
+        {:else if v.album.find === 'fail'}
+          {#if share.finding}
+            <p class="note" role="status">{FIND_LINE}</p>
+          {:else}
+            <p class="note err" role="alert">{share.findError || v.album.findErr}</p>
+          {/if}
+          <p class="note">{FIND_NEW_LINE}</p>
+          <div class="actions retry"><button disabled={share.finding} onclick={() => share.find()}>{RETRY_LABEL}</button></div>
+        {/if}
         <ShareForm />
       {/if}
       {#if share.waiting && screen !== 'run'}<p class="hint wait" role="status">{WAIT_LINE}</p>{/if}
@@ -157,6 +190,13 @@
   .wait {
     margin: 8px 0 0;
     text-align: right;
+  }
+  .err {
+    color: #e5645a;
+    font-size: 12px;
+  }
+  .retry {
+    margin: -4px 0 12px;
   }
   .actions {
     display: flex;

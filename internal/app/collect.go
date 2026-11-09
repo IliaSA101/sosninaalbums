@@ -60,9 +60,10 @@ type CollectOptions struct {
 type collectJob struct {
 	p       *model.Project
 	side    model.Side
-	dir     string // папка альбома внутри выбранной
-	album   string // dir/<имя>.salbum
-	replace bool   // файл альбома уже есть: перед записью — резервная копия
+	refs    []string // привязки к выгруженным альбомам (167): Clone проекта их теряет
+	dir     string   // папка альбома внутри выбранной
+	album   string   // dir/<имя>.salbum
+	replace bool     // файл альбома уже есть: перед записью — резервная копия
 	pl      collect.Plan
 }
 
@@ -113,7 +114,7 @@ func (a *App) Collect(o CollectOptions) (bool, error) {
 	}()
 
 	ed := a.editor()
-	p, side := ed.SnapshotSide()
+	p, side, refs := ed.SnapshotSideRefs()
 	open := ed.Path()
 	extra, _ := a.collectExtra(o.All)
 	pre, err := a.collectPlan(p, extra, "")
@@ -131,7 +132,7 @@ func (a *App) Collect(o CollectOptions) (bool, error) {
 		return false, err
 	}
 	a.rememberDir(prefs.DirCollect, parent)
-	j, ok, err := a.prepareCollect(p, side, extra, parent, open)
+	j, ok, err := a.prepareCollect(p, side, refs, extra, parent, open)
 	if !ok || err != nil {
 		return false, err
 	}
@@ -150,7 +151,7 @@ func (a *App) Collect(o CollectOptions) (bool, error) {
 
 // prepareCollect — папка альбома в выбранной parent, план для неё, вопрос о замене альбома и
 // место на диске. ok=false без ошибки — пользователь ответил «нет».
-func (a *App) prepareCollect(p *model.Project, side model.Side, extra []string, parent, open string) (collectJob, bool, error) {
+func (a *App) prepareCollect(p *model.Project, side model.Side, refs []string, extra []string, parent, open string) (collectJob, bool, error) {
 	if paths.CheckLocalPath(parent) != nil {
 		return collectJob{}, false, errors.New(noUNC) //nolint:staticcheck // текст уходит пользователю тостом как есть
 	}
@@ -162,7 +163,7 @@ func (a *App) prepareCollect(p *model.Project, side model.Side, extra []string, 
 	if inPhotoFolder(dir, p.Folders) {
 		return collectJob{}, false, errors.New(inFolders) //nolint:staticcheck // текст уходит пользователю тостом как есть
 	}
-	j := collectJob{p: p, side: side, dir: dir, album: filepath.Join(dir, name+projectExt)}
+	j := collectJob{p: p, side: side, refs: refs, dir: dir, album: filepath.Join(dir, name+projectExt)}
 	if open != "" && (paths.SamePath(j.album, open) || sameFile(j.album, open)) {
 		return collectJob{}, false, errors.New("Это файл открытого альбома — выберите другую папку") //nolint:staticcheck // текст уходит пользователю тостом как есть
 	}
@@ -244,7 +245,7 @@ func (a *App) runCollect(ctx context.Context, cancel context.CancelFunc, j colle
 	})
 	copyFailed := err != nil
 	if err == nil {
-		q, qm := collect.Album(j.p, j.side, j.dir, j.pl)
+		q, qm := collect.Album(j.p, j.side, j.dir, j.pl, j.refs)
 		if j.replace {
 			err = a.backupReplaced(j.album)
 		}

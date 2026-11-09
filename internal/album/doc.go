@@ -18,9 +18,12 @@
 //   - editor_marks.go — свои отметки (спека 004): живут в Editor рядом с проектом и идут в тот
 //     же стек отмены, но не через change; перепривязка отметок;
 //   - editor_uid.go — отпечаток проекта (146, T4-9): выдача в NewEditor и Restore, печать пути
-//     (seals) только при выдаче, сверка печати при выгрузке и показе ссылки (ShareIdent,
-//     SnapshotAt), новый при «Сохранить как» другим проектом (SaveNew), запись перед выгрузкой
-//     (NeedUID, SaveUID); мимо change, без шага отмены и dirty;
+//     (seals) при выдаче и как есть при записи (решений не принимает, 167), SnapshotAt для выгрузки;
+//     editor_pin.go — запись отпечатка перед выгрузкой (NeedFileUID, SaveFileUID), «выгрузить как
+//     новый» (SaveFresh), «Сохранить как» (SaveOver); мимо change, без шага отмены и dirty;
+//   - editor_refs.go — привязки к выгруженным альбомам (167): карта refs по отпечатку, SetRef,
+//     KeepRefs, ShareRefs, NewTemplateEditor; идут в файл через stamp, в снимках — отдельным
+//     полем (SnapshotAt, SnapshotSideRefs); мимо change, без шага отмены и dirty;
 //   - editor_expect.go — правка «если всё ещё то же» для агентов (149): Expect (rev и срок вызова)
 //     сверяется под e.mu в editWith; AutoBuildIf, VaryLayoutsIf, UndoIfRev; ErrLate, ErrRevChanged;
 //   - editor_expect_more.go — остальные правки агента (151): SetMarksIf, CreateCoverLookIf, CoverPhotoIf,

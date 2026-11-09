@@ -11,6 +11,8 @@ export const GUIDE_ORDER: Record<GroupId, readonly string[]> = {
     'save',
     'export',
     'share-link',
+    'share-moved',
+    'new-from-template',
     'fsfera',
     'print-px',
     'print-profile',

@@ -21,10 +21,10 @@ const shareEstimateBPP = 0.14
 // sharer не видит проект (depguard) — она берёт только это значение. Проект не меняется.
 func (a *App) shareJob() share.Job {
 	ed := a.editor()
-	gen := text.Gen()                     // до снимка: смена шрифтов между ними не проскочит (export.PinFonts)
-	path, p, v, sealed := ed.SnapshotAt() // путь, снимок и печать — под одним замком: от одного альбома
+	gen := text.Gen()                   // до снимка: смена шрифтов между ними не проскочит (export.PinFonts)
+	path, p, v, refs := ed.SnapshotAt() // путь, снимок и привязки — под одним замком: от одного альбома
 	// Отпечаток — от снимка: страницы и сверка записи от одного проекта.
-	job := share.Job{Path: path, UID: p.UID, Unsealed: !sealed, Title: "Альбом", Fonts: gen}
+	job := share.Job{Path: path, UID: p.UID, Refs: refs, Title: "Альбом", Fonts: gen}
 	if job.Path != "" {
 		job.Title = strings.TrimSuffix(filepath.Base(job.Path), filepath.Ext(job.Path))
 	}

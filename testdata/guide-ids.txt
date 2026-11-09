@@ -73,6 +73,7 @@ my-colors
 name-search
 names
 new-album
+new-from-template
 new-spread
 open
 own-fonts
@@ -99,6 +100,7 @@ save
 settings
 shape
 share-link
+share-moved
 similar
 snap
 split

@@ -16,7 +16,7 @@ import (
 )
 
 // uidEditor — Editor над файлом path с проектом p (сначала p записан как есть). Отпечаток без
-// печати получает печать path — как файл, где отпечаток выдан по этому пути (SaveNew).
+// печати получает печать path — как файл, где отпечаток выдан по этому пути (SaveOver).
 func uidEditor(t *testing.T, p *model.Project, path string) *Editor {
 	t.Helper()
 	if model.GoodUID(p.UID) && p.UIDAt() == "" {
@@ -47,8 +47,8 @@ func fileUID(t *testing.T, path string) string {
 }
 
 // Альбом до 0.32 (без поля): отпечаток выдан без шага отмены, rev и dirty; в файле его нет,
-// пока не записан SaveUID; выданный при открытии без печати — SaveUID выдаёт новый с печатью
-// пути; второй SaveUID — холостой. Несколько альбомов — разные отпечатки.
+// пока не записан SaveFileUID; тот же отпечаток ложится в файл, второй SaveFileUID — холостой.
+// Несколько альбомов — разные отпечатки.
 func TestEditorUIDOldFile(t *testing.T) {
 	dir := testkit.TempDir(t)
 	seen := map[string]bool{}
@@ -63,32 +63,31 @@ func TestEditorUIDOldFile(t *testing.T) {
 		if len(e.undo) != 0 || e.dirty || e.rev != 0 {
 			t.Fatalf("выдача отпечатка — правка: шагов %d, dirty %v, rev %d", len(e.undo), e.dirty, e.rev)
 		}
-		if need, err := e.NeedUID(path, uid); !need || err != nil {
-			t.Fatalf("NeedUID до записи: %v %v", need, err)
+		if need, err := e.NeedFileUID(path, uid); !need || err != nil {
+			t.Fatalf("NeedFileUID до записи: %v %v", need, err)
 		}
 		if got := fileUID(t, path); got != "" {
 			t.Fatalf("в файле до записи %q", got)
 		}
-		pinned, err := e.SaveUID(path, uid)
+		pinned, err := e.SaveFileUID(path, uid)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if pinned == uid || !model.GoodUID(pinned) || seen[pinned] || e.p.UID != pinned {
-			t.Fatalf("SaveUID без печати: %q (был %q, в альбоме %q)", pinned, uid, e.p.UID)
+		if pinned != uid || e.p.UID != uid { // печать пути решений не принимает: отпечаток тот же (167-6)
+			t.Fatalf("SaveFileUID: %q (был %q, в альбоме %q)", pinned, uid, e.p.UID)
 		}
-		seen[pinned], uid = true, pinned
-		if need, err := e.NeedUID(path, uid); need || err != nil {
-			t.Fatalf("NeedUID после записи: %v %v", need, err)
+		if need, err := e.NeedFileUID(path, uid); need || err != nil {
+			t.Fatalf("NeedFileUID после записи: %v %v", need, err)
 		}
-		if got := fileUID(t, path); got != uid || fileTag(t, path) != model.UIDTag(uid, path) {
-			t.Fatalf("в файле %q, ждали %q с печатью пути", got, uid)
+		if got := fileUID(t, path); got != uid {
+			t.Fatalf("в файле %q, ждали %q", got, uid)
 		}
 		st, _ := os.Stat(path)
-		if again, err := e.SaveUID(path, uid); again != uid || err != nil {
+		if again, err := e.SaveFileUID(path, uid); again != uid || err != nil {
 			t.Fatal(again, err)
 		}
 		if st2, _ := os.Stat(path); !st2.ModTime().Equal(st.ModTime()) || st2.Size() != st.Size() {
-			t.Error("повторный SaveUID переписал файл")
+			t.Error("повторный SaveFileUID переписал файл")
 		}
 	}
 }
@@ -104,8 +103,8 @@ func TestEditorUIDFromFile(t *testing.T) {
 	if _, uid := e.Ident(); uid != p.UID {
 		t.Fatalf("отпечаток %q, в файле %q", uid, p.UID)
 	}
-	if need, err := e.NeedUID(path, p.UID); need || err != nil {
-		t.Fatalf("NeedUID: %v %v", need, err)
+	if need, err := e.NeedFileUID(path, p.UID); need || err != nil {
+		t.Fatalf("NeedFileUID: %v %v", need, err)
 	}
 	for _, bad := range []string{"ABCDEF00000000000000000000000000", "short", strings.Repeat("g", 32), `"},"x":"`} {
 		data, err := os.ReadFile(path)
@@ -132,13 +131,13 @@ func TestEditorUIDFromFile(t *testing.T) {
 	if _, uid := n.Ident(); !model.GoodUID(uid) {
 		t.Fatalf("новый альбом без отпечатка: %q", uid)
 	}
-	if _, err := n.NeedUID("", n.p.UID); !errors.Is(err, ErrUIDChanged) {
+	if _, err := n.NeedFileUID("", n.p.UID); !errors.Is(err, ErrUIDChanged) {
 		t.Fatalf("сверка без пути: %v", err)
 	}
 }
 
 // Восстановление копии: копия другого проекта — её отпечаток, Ctrl+Z — прежний, Ctrl+Y — снова
-// копии; копия без отпечатка — новый. Устаревший отпечаток в NeedUID и SaveUID — отказ, файл цел.
+// копии; копия без отпечатка — новый. Устаревший отпечаток в NeedFileUID и SaveFileUID — отказ, файл цел.
 func TestEditorUIDRestore(t *testing.T) {
 	dir := testkit.TempDir(t)
 	p := model.New()
@@ -155,16 +154,16 @@ func TestEditorUIDRestore(t *testing.T) {
 	if e.p.UID != other.UID {
 		t.Fatalf("после восстановления %q, ждали %q", e.p.UID, other.UID)
 	}
-	if need, err := e.NeedUID(path, other.UID); !need || err != nil {
-		t.Fatalf("NeedUID после восстановления: %v %v", need, err)
+	if need, err := e.NeedFileUID(path, other.UID); !need || err != nil {
+		t.Fatalf("NeedFileUID после восстановления: %v %v", need, err)
 	}
-	if _, err := e.NeedUID(path, p.UID); !errors.Is(err, ErrUIDChanged) {
+	if _, err := e.NeedFileUID(path, p.UID); !errors.Is(err, ErrUIDChanged) {
 		t.Fatalf("устаревший отпечаток: %v", err)
 	}
-	if _, err := e.SaveUID(path, p.UID); !errors.Is(err, ErrUIDChanged) || fileUID(t, path) != p.UID {
-		t.Fatalf("SaveUID устаревшего: %v, в файле %q", err, fileUID(t, path))
+	if _, err := e.SaveFileUID(path, p.UID); !errors.Is(err, ErrUIDChanged) || fileUID(t, path) != p.UID {
+		t.Fatalf("SaveFileUID устаревшего: %v, в файле %q", err, fileUID(t, path))
 	}
-	if _, err := e.NeedUID(filepath.Join(dir, "b.salbum"), other.UID); !errors.Is(err, ErrUIDChanged) {
+	if _, err := e.NeedFileUID(filepath.Join(dir, "b.salbum"), other.UID); !errors.Is(err, ErrUIDChanged) {
 		t.Fatalf("другой путь: %v", err)
 	}
 	e.Undo()
@@ -194,9 +193,9 @@ func TestEditorUIDRestore(t *testing.T) {
 	}
 }
 
-// «Сохранить как» другим проектом: новый отпечаток в проекте, стеках отмены и возврата и снимке
+// «Сохранить как» другим проектом (SaveOver в новый путь): новый отпечаток в проекте, стеках отмены и возврата и снимке
 // пересборки (снимки чужой копии — свои); запись не удалась — всё прежнее.
-func TestEditorSaveNew(t *testing.T) {
+func TestEditorSaveOverNew(t *testing.T) {
 	dir := testkit.TempDir(t)
 	p := model.New()
 	p.UID = model.NewUID()
@@ -218,7 +217,7 @@ func TestEditorSaveNew(t *testing.T) {
 	}
 
 	bad := filepath.Join(path, "b.salbum") // папка — файл альбома: запись не пройдёт
-	if err := e.SaveNew(bad); err == nil {
+	if err := saveNew(e, bad); err == nil {
 		t.Fatal("запись внутрь файла прошла")
 	}
 	if e.p.UID != old || e.undo[1].P.UID != old || e.redo[0].P.UID != old || e.auto.base.UID != old || e.path != path {
@@ -226,7 +225,7 @@ func TestEditorSaveNew(t *testing.T) {
 	}
 
 	to := filepath.Join(dir, "b.salbum")
-	if err := e.SaveNew(to); err != nil {
+	if err := saveNew(e, to); err != nil {
 		t.Fatal(err)
 	}
 	uid := e.p.UID
@@ -242,8 +241,8 @@ func TestEditorSaveNew(t *testing.T) {
 	if fileUID(t, to) != uid || fileUID(t, path) != old {
 		t.Fatalf("в файлах: %q %q", fileUID(t, to), fileUID(t, path))
 	}
-	if need, err := e.NeedUID(to, uid); need || err != nil {
-		t.Fatalf("NeedUID после SaveNew: %v %v", need, err)
+	if need, err := e.NeedFileUID(to, uid); need || err != nil {
+		t.Fatalf("NeedFileUID после SaveOver: %v %v", need, err)
 	}
 	e.Undo()
 	if e.p.UID != uid {
@@ -272,4 +271,11 @@ func TestGoodUID(t *testing.T) {
 	if !model.GoodUID(a) || a == b {
 		t.Fatalf("NewUID: %q %q", a, b)
 	}
+}
+
+// saveNew — «Сохранить как» в новый путь: SaveOver выдаёт новый отпечаток (fresh), если файла-цели с
+// тем же проектом нет.
+func saveNew(e *Editor, path string) error {
+	_, err := e.SaveOver(path)
+	return err
 }

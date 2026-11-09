@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -114,15 +115,25 @@ func (s *Service) execute(ctx context.Context, j *job) (note string, err error) 
 	rec := cur
 	rec.URL, rec.ExpiresAt, rec.PublishedAt = pub.URL, exp, s.now().UTC()
 	rec.Scene, rec.Title, rec.Password, rec.Gone = j.Scene, m.Title, j.password, false
-	wrote, perr := s.putIf(j.Path, rec, s.own(ctx, j.run))
-	switch {
-	case !wrote: // путь занят другим проектом или ход остановлен: прежнюю запись не возвращаем
+	rec.Path = j.Path // для «Обновить этот альбом» с другого пути запись переезжает сюда только теперь (167-18)
+	wrote, perr := s.putIf(j.UID, rec, s.own(ctx, j.run))
+	if !wrote { // путь занят другим проектом или ход остановлен: прежнюю запись не возвращаем
 		return "", context.Canceled
-	case perr != nil:
+	}
+	s.bindMoved(j, rec.ID)
+	if perr != nil {
 		log.Printf("выгрузка: запись о ссылке не сохранена: %v", perr)
 		return "Ссылка готова, но записать её в программе не удалось: " + perr.Error() + ". Она показана в окне до выхода из программы — скопируйте её сейчас.", nil
 	}
 	return "", nil
+}
+
+// bindMoved — привязка после «обновить этот альбом» с другого пути: запись переехала на путь файла
+// последним putIf (теперь она своя), раньше привязка легла бы в файл при срыве выгрузки (design §4.4).
+func (s *Service) bindMoved(j *job, id string) {
+	if j.moved {
+		s.bind(j, id)
+	}
 }
 
 // prepare рисует страницы в j.dir и собирает манифест; готовое ложится в j.pages и j.man (для keep).
@@ -144,22 +155,28 @@ func (s *Service) prepare(ctx context.Context, j *job, gen string, lim albums.Li
 // open создаёт альбом на сервисе или присылает новую редакцию прежнего (ссылка та же). Запись с id
 // ложится сразу после Create: обрыв дальше оставляет id, и следующий «Выгрузить» продолжит через
 // Update (design §3.3 п. 8). 404 на Update — запись «нет на сервере» и вопрос о новой ссылке.
-func (s *Service) open(ctx context.Context, c *albums.Client, j *job, m *albums.Manifest) (prefs.ShareRecord, []int, error) {
+func (s *Service) open(ctx context.Context, c *albums.Client, j *job, m *albums.Manifest) (prefs.ProjectRecord, []int, error) {
 	if j.base != nil {
 		up, err := c.Update(ctx, j.base.ID, m)
 		switch {
 		case err == nil:
 			b := *j.base
 			b.Gone = false // сервис альбом знает: пометка «нет на сервере» снимается
+			if !j.moved {  // «обновить этот альбом» с другого пути: запись ещё чужая, привязка — после последнего putIf (design §4.4)
+				s.bind(j, b.ID)
+			}
 			return b, up.Missing, nil
 		case !errors.Is(err, albums.ErrGone):
 			logFail("новая редакция", err)
-			return prefs.ShareRecord{}, nil, err
+			return prefs.ProjectRecord{}, nil, err
 		}
 		logFail("новая редакция", err)
+		if j.moved { // выбрано обновить определённый альбом: молча создавать новый нельзя (167-18)
+			return prefs.ProjectRecord{}, nil, fail(movedGoneText)
+		}
 		s.markGone(j.Path, j.UID, s.own(ctx, j.run))
 		if ok, aerr := s.h.Ask(goneQuestion); aerr != nil || !ok {
-			return prefs.ShareRecord{}, nil, context.Canceled // «Нет»: остановка без ошибки
+			return prefs.ProjectRecord{}, nil, context.Canceled // «Нет»: остановка без ошибки
 		}
 		j.base = nil
 		if j.days == 0 {
@@ -169,16 +186,17 @@ func (s *Service) open(ctx context.Context, c *albums.Client, j *job, m *albums.
 	cr, err := c.Create(ctx, &albums.CreateRequest{Manifest: *m, ExpiresAt: s.now().AddDate(0, 0, j.days).UTC(), Password: j.password})
 	if err != nil {
 		logFail("создание", err)
-		return prefs.ShareRecord{}, nil, noService(err)
+		return prefs.ProjectRecord{}, nil, noService(err)
 	}
-	rec := prefs.ShareRecord{Origin: j.origin, ID: cr.ID, Title: m.Title, Password: j.password, ExpiresAt: cr.ExpiresAt, UID: j.UID}
-	wrote, perr := s.putIf(j.Path, rec, s.own(ctx, j.run))
+	rec := prefs.ProjectRecord{Origin: j.origin, ID: cr.ID, Title: m.Title, Password: j.password, ExpiresAt: cr.ExpiresAt, Path: j.Path}
+	wrote, perr := s.putIf(j.UID, rec, s.own(ctx, j.run))
 	if !wrote {
-		return prefs.ShareRecord{}, nil, context.Canceled
+		return prefs.ProjectRecord{}, nil, context.Canceled
 	}
 	if perr != nil {
 		log.Printf("выгрузка: запись с id не сохранена: %v", perr)
 	}
+	s.bind(j, cr.ID)
 	return rec, cr.Missing, nil
 }
 
@@ -203,7 +221,7 @@ func (s *Service) publish(ctx context.Context, c *albums.Client, j *job, id stri
 // setPassword меняет пароль прежней ссылки (Patch с revoke_sessions) до публикации новой редакции;
 // запись получает новый пароль сразу: обрыв дальше оставит её равной тому, что у сервиса. Пароль не
 // менялся (и новая ссылка, где пароль ушёл в Create) — ничего не делает.
-func (s *Service) setPassword(ctx context.Context, c *albums.Client, j *job, cur prefs.ShareRecord) (prefs.ShareRecord, error) {
+func (s *Service) setPassword(ctx context.Context, c *albums.Client, j *job, cur prefs.ProjectRecord) (prefs.ProjectRecord, error) {
 	if j.password == cur.Password {
 		return cur, nil
 	}
@@ -212,8 +230,8 @@ func (s *Service) setPassword(ctx context.Context, c *albums.Client, j *job, cur
 		logFail("пароль", err)
 		return cur, err
 	}
-	cur.Password = j.password
-	wrote, perr := s.putIf(j.Path, cur, s.own(ctx, j.run))
+	cur.Password, cur.PassUnknown = j.password, false
+	wrote, perr := s.putIf(j.UID, cur, s.own(ctx, j.run))
 	if !wrote {
 		return cur, context.Canceled
 	}
@@ -225,7 +243,7 @@ func (s *Service) setPassword(ctx context.Context, c *albums.Client, j *job, cur
 
 // adjust правит срок, если он отличается от того, что у сервиса (Patch; пароль — setPassword до
 // публикации). Возвращает итоговый срок.
-func (s *Service) adjust(ctx context.Context, c *albums.Client, j *job, cur prefs.ShareRecord, pub *albums.Published) (time.Time, error) {
+func (s *Service) adjust(ctx context.Context, c *albums.Client, j *job, cur prefs.ProjectRecord, pub *albums.Published) (time.Time, error) {
 	if j.base == nil || j.days <= 0 {
 		return pub.ExpiresAt, nil
 	}
@@ -238,17 +256,31 @@ func (s *Service) adjust(ctx context.Context, c *albums.Client, j *job, cur pref
 	return al.ExpiresAt, nil
 }
 
-// markGone помечает запись пути «нет на сервере» (404 на запрос по id альбома); запись другого
-// проекта (отпечаток не uid) не трогается. alive — сверка
-// putIf; nil — без неё.
+// markGone помечает свою запись проекта «нет на сервере» (404 на запрос по id альбома). Чужая
+// запись (167-12) не пишется: это не её файл. alive — сверка putIf; nil — без неё.
 func (s *Service) markGone(path, uid string, alive func() bool) {
-	rec, ok, _ := s.get(path, uid)
-	if !ok || rec.Gone {
+	rec, had, own := s.get(path, uid)
+	if !had || !own || rec.Gone {
 		return
 	}
 	rec.Gone = true
-	if _, err := s.putIf(path, rec, alive); err != nil {
+	if _, err := s.putIf(uid, rec, alive); err != nil {
 		log.Printf("выгрузка: пометка «нет на сервере» не сохранена: %v", err)
+	}
+}
+
+// movedGoneText — остановка «Обновить этот альбом», когда альбома на сервере уже нет (167-18).
+const movedGoneText = "Прежнего альбома больше нет на сервере — выгрузите как новый"
+
+// bind кладёт привязку к альбому id в файл проекта (167-15), если её там нет. Сбой — только в
+// журнал, без id и отпечатка: ссылка работает и без привязки (на другом компьютере будет «новая»).
+func (s *Service) bind(j *job, id string) {
+	ref := s.h.LinkRef(j.UID, id)
+	if ref == "" || slices.Contains(j.Refs, ref) {
+		return
+	}
+	if err := s.h.Bind(j.Path, j.UID, id); err != nil {
+		log.Printf("выгрузка: привязка к файлу не записана")
 	}
 }
 

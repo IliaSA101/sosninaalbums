@@ -92,10 +92,10 @@ export interface MenuCtx {
 }
 
 // Id команды каталога для пункта: align с параметром — отдельные alignLeft…alignDistV (074-7);
-// команды с путём или опорой (openRecent, clearRecent, alignTo) клавиши не имеют; share (146) — вне каталога Go, пока владелец не просил клавишу.
+// команды с путём или опорой (openRecent, clearRecent, alignTo) клавиши не имеют; share (146) и newTemplate (167) — вне каталога Go, пока владелец не просил клавишу.
 export function keyId(cmd: Command, arg?: string): string | undefined {
   if (cmd === 'align') return arg ? 'align' + arg[0].toUpperCase() + arg.slice(1) : undefined
-  return cmd === 'alignTo' || cmd === 'openRecent' || cmd === 'clearRecent' || cmd === 'share' ? undefined : cmd
+  return cmd === 'alignTo' || cmd === 'openRecent' || cmd === 'clearRecent' || cmd === 'share' || cmd === 'newTemplate' ? undefined : cmd
 }
 
 // Клавиша команды для подписи пункта: первая из действующих (в том числе своя).
@@ -201,6 +201,12 @@ function fileSpecs(c: MenuCtx): Spec[][] {
   return [
     [
       { id: 'new', label: 'Новый альбом', cmd: 'new' },
+      {
+        id: 'newTemplate',
+        label: 'Новый альбом из шаблона…',
+        cmd: 'newTemplate',
+        hint: 'Вёрстка другого альбома как основа: без его ссылки',
+      },
       // Отдельный проект-лист, не виньетка в альбоме (отзыв 14.10): та — «Разворот ▸ Сделать разворот виньеткой».
       {
         id: 'newSheet',

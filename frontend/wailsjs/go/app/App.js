@@ -586,6 +586,10 @@ export function NewBin(arg1, arg2) {
   return window['go']['app']['App']['NewBin'](arg1, arg2);
 }
 
+export function NewFromTemplate() {
+  return window['go']['app']['App']['NewFromTemplate']();
+}
+
 export function NewLookSpread() {
   return window['go']['app']['App']['NewLookSpread']();
 }
@@ -1160,6 +1164,10 @@ export function ShareChange(arg1) {
 
 export function ShareConnect(arg1, arg2) {
   return window['go']['app']['App']['ShareConnect'](arg1, arg2);
+}
+
+export function ShareFind() {
+  return window['go']['app']['App']['ShareFind']();
 }
 
 export function ShareForget() {

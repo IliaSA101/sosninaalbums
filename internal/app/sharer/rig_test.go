@@ -19,6 +19,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/api/albums"
 	"github.com/IliaSA101/sosninaalbums/api/albums/albumstest"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -54,6 +55,9 @@ type rig struct {
 	waits   []time.Duration
 	exportB bool
 	pins    []string // отпечатки, которые служба просила записать в файл (Pin)
+	fresh   int      // сколько раз Pin просили новый отпечаток
+	binds   []string // id альбомов, привязку которых служба просила положить в файл (Bind)
+	bindErr error    // ответ Bind
 	pinErr  error    // ответ Pin; nil — записан
 	pinUID  string   // отпечаток, который выдаёт Pin; "" — прежний
 	wg      sync.WaitGroup
@@ -89,6 +93,8 @@ func newRigLimits(t *testing.T, lim albums.Limits) *rig {
 		Plan:       func() share.Job { r.mu.Lock(); defer r.mu.Unlock(); return r.job },
 		Ident:      r.ident,
 		Pin:        r.pin,
+		Bind:       r.bind,
+		LinkRef:    model.LinkRef,
 		Emit:       r.emit,
 		GoBG:       func(fn func()) bool { r.wg.Go(fn); return true },
 		StopCtx:    context.Background,
@@ -130,28 +136,44 @@ func (r *rig) ask(msg string) (bool, error) {
 	return r.answer, nil
 }
 
-// ident — Host.Ident как у App (ShareIdent): печать не этого пути — без отпечатка.
+// ident — Host.Ident как у App: путь и отпечаток текущего альбома.
 func (r *rig) ident() (string, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.job.Unsealed {
-		return r.job.Path, ""
-	}
 	return r.job.Path, r.job.UID
 }
 
-func (r *rig) pin(_, uid string) (string, error) {
+func (r *rig) pin(_, uid string, fresh bool) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pins = append(r.pins, uid)
 	if r.pinErr != nil {
 		return "", r.pinErr
 	}
-	if r.pinUID != "" { // выдача нового отпечатка с печатью пути: альбом дальше с ним (как App)
-		r.job.UID, r.job.Unsealed = r.pinUID, false
+	if fresh { // новый отпечаток без привязок: альбом дальше с ним (как App)
+		r.fresh++
+		r.job.UID, r.job.Refs = model.NewUID(), nil
+		return r.job.UID, nil
+	}
+	if r.pinUID != "" {
+		r.job.UID = r.pinUID
 		return r.pinUID, nil
 	}
 	return uid, nil
+}
+
+// bind — Host.Bind как у App: привязка ложится в Editor (здесь — в снимок), новая первой.
+func (r *rig) bind(_, uid, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.binds = append(r.binds, id)
+	if r.bindErr != nil {
+		return r.bindErr
+	}
+	if r.job.UID == uid {
+		r.job.Refs = model.AddLinkRef(r.job.Refs, model.LinkRef(uid, id))
+	}
+	return nil
 }
 
 func (r *rig) setFault(f func(q *http.Request) *albumstest.Fault) {
@@ -226,7 +248,7 @@ func (r *rig) state() View {
 
 // rec — запись текущего альбома из shares.json.
 func (r *rig) rec() (id string, ok bool) {
-	rec, ok := r.svc.look(r.curJob().Path)
+	rec, ok := r.svc.look(r.curJob().UID)
 	return rec.ID, ok
 }
 

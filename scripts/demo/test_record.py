@@ -267,7 +267,7 @@ class TestRecordCode(unittest.TestCase):
         self.assertEqual(self.run_with(lambda *a, **k: {"scenes": {"A": {"privacy": 0}, "B": {"privacy": 2}}}), 3)
         self.assertEqual(self.run_with(lambda *a, **k: ok, console="== scene A\nerror: boom\n"), 6)
         # «не наше» и метки этапов консоль не портят
-        self.assertEqual(self.run_with(lambda *a, **k: ok, console="== scene A\nerror: Cannot read properties of null (reading 'nodes')\n"), 0)
+        self.assertEqual(self.run_with(lambda *a, **k: ok, console="== scene A\nerror: Cannot read properties of null (reading 'nodes')\n    at x (http://h/wails/ipc.js:1:2)\n"), 0)
         self.assertEqual(self.run_with(lambda *a, **k: ok, slow=2), 0)  # медленный режим доходит до record_all
 
     def test_args_passed(self):

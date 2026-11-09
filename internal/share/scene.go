@@ -36,7 +36,8 @@ func SceneHash(spreads []render.Spread, cover *export.CoverJob, spec export.WebS
 	w.value(reflect.ValueOf(spec), 0)
 	w.value(reflect.ValueOf(spreads), 0)
 	if cover != nil {
-		w.str("cover")
+		// Смена вида обложки листалки (0.37.1-1): прежние выгрузки с обложкой видятся изменёнными.
+		w.str("cover-fill")
 		w.value(reflect.ValueOf(cover.Spread), 0)
 		w.value(reflect.ValueOf(cover.Opt), 0)
 	}

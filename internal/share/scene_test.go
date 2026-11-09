@@ -337,3 +337,17 @@ func TestShareSceneZeroFields(t *testing.T) {
 		t.Error("Gen у TextDraw не пропущен")
 	}
 }
+
+// Метка обложки (0.37.1-1): без обложки хэш прежний (зашит), с обложкой — не равен хэшу до смены вида.
+func TestShareSceneHashCoverLabel(t *testing.T) {
+	sp := []render.Spread{{Bg: [2]color.RGBA{{1, 2, 3, 255}, {4, 5, 6, 255}}}}
+	cj := &export.CoverJob{Spread: render.Spread{Bg: [2]color.RGBA{{1, 2, 3, 255}, {1, 2, 3, 255}}}, Opt: render.Options{PageW: 50, PageH: 60, DPI: 100}}
+	const noCover = "45688ab21ca00ae56e87871d09cd9cb80fb68c41fc43dde0a6cabce6a93c9142"
+	const coverBefore = "698fa711a28a07d2a0ace2ba95219b6e4581bebefb1e58b2f8034fc08ea5c3f5" // метка "cover" до 0.37.1
+	if got := mustHash(t, sp, nil, specA, nil); got != noCover {
+		t.Errorf("хэш без обложки изменился: %s", got)
+	}
+	if got := mustHash(t, sp, cj, specA, nil); got == coverBefore || got == noCover {
+		t.Errorf("хэш с обложкой не отличается от прежнего: %s", got)
+	}
+}

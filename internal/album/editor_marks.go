@@ -233,9 +233,16 @@ func (e *Editor) Marks() map[string]model.MarkView {
 // SnapshotSide — копия проекта, своих отметок и подборок под одним замком (сбор в папку, 069):
 // правка между двумя отдельными снимками развела бы альбом и отметки собранной копии.
 func (e *Editor) SnapshotSide() (*model.Project, model.Side) {
+	p, side, _ := e.SnapshotSideRefs()
+	return p, side
+}
+
+// SnapshotSideRefs — SnapshotSide вместе с привязками к выгруженным альбомам (167: Clone их теряет):
+// сбор в папку сохраняет отпечаток и привязки (167-9).
+func (e *Editor) SnapshotSideRefs() (*model.Project, model.Side, []string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.p.Clone(), e.side().Clone()
+	return e.p.Clone(), e.side().Clone(), slices.Clone(e.refs[e.p.UID])
 }
 
 // rating — действующая оценка фото (своя отметка поверх XMP из infos; фото не из ленты —

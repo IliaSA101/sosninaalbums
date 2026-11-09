@@ -19,6 +19,7 @@ wire()
 
 beforeEach(() => {
   prefs.level = 'standard'
+  window.dispatchEvent(new Event('blur')) // модульный «последний Ctrl» между тестами не переносим
   peekKey.held = false
   store.loaded = true
   store.view = { ...store.view, folders: ['D:/a'] } as never

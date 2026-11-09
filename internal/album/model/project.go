@@ -257,6 +257,8 @@ type Project struct {
 	loaded Side
 	// uidAt — печать отпечатка из файла (uid.go, UIDAt): JSON её не несёт.
 	uidAt string
+	// shareRefs — привязки к выгруженным альбомам из файла (sharerefs.go): JSON их не несёт.
+	shareRefs []string
 }
 
 // Доступы к from и loaded: полем их не экспортировать — попали бы в JSON снимков отмены

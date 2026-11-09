@@ -48,6 +48,7 @@ describe('buildMenu', () => {
     const m = buildMenu(ctx())
     expect(ids(m, 'file')).toEqual([
       'new',
+      'newTemplate',
       'newSheet',
       'open',
       'recent',
@@ -254,10 +255,24 @@ describe('уровень в меню (спека 010 U1)', () => {
     expect(sub.map((i) => i.checked)).toEqual([false, true, false, false])
     expect(find(m, 'compareLevels')).toMatchObject({ cmd: 'compareLevels', label: 'Уровни и функции…' })
   })
+  it('«Новый альбом из шаблона…» (167) — сразу после «Новый альбом», на всех уровнях, без клавиши, с подсказкой', () => {
+    for (const lvl of ['simple', 'standard', 'full'] as const) {
+      const file = ids(buildMenu(at(lvl)), 'file')
+      expect(file.indexOf('newTemplate'), lvl).toBe(file.indexOf('new') + 1)
+    }
+    const it = find(buildMenu(at('simple')), 'newTemplate')
+    expect(it).toMatchObject({
+      label: 'Новый альбом из шаблона…',
+      cmd: 'newTemplate',
+      hint: 'Вёрстка другого альбома как основа: без его ссылки',
+    })
+    expect(it?.keys).toBeUndefined()
+    expect(it?.disabled).toBeUndefined()
+  })
   it('«Новый проект: виньетка-лист…» — со «Стандартного» (решение 80), рядом с «Новый альбом»', () => {
     expect(ids(buildMenu(at('simple')), 'file')).not.toContain('newSheet')
     const file = ids(buildMenu(at('standard')), 'file')
-    expect(file.indexOf('newSheet')).toBe(file.indexOf('new') + 1)
+    expect(file.indexOf('newSheet')).toBe(file.indexOf('new') + 2) // между ними — «Новый альбом из шаблона…» (167)
     expect(find(buildMenu(at('standard')), 'newSheet')).toMatchObject({
       label: 'Новый проект: виньетка-лист…',
       cmd: 'newSheet',

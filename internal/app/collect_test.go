@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -186,6 +187,45 @@ func TestCollectAlbum(t *testing.T) {
 	}
 	if e.busy() {
 		t.Fatal("флаг сбора не снят")
+	}
+}
+
+// 167: сбор кладёт в копию отпечаток и привязки к выгруженным альбомам (Clone проекта их теряет):
+// после Load копии те же uid и shareRefs, в том же порядке; открытый альбом их не теряет. Без
+// привязок копия их не получает.
+func TestCollectKeepsShareRefs(t *testing.T) {
+	e := newCollectEnv(t, 2)
+	path, uid := e.a.editor().Ident()
+	refs := []string{model.LinkRef(uid, "AbCdEfGhIjKlMnOpQrStU1"), model.LinkRef(uid, "AbCdEfGhIjKlMnOpQrStU2")}
+	for _, r := range refs { // новая первой: порядок в файле — обратный порядку SetRef
+		if err := e.a.editor().SetRef(path, uid, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := e.a.editor().ShareRefs()
+	if len(want) != 2 || want[0] != refs[1] {
+		t.Fatalf("привязки редактора: %v", want)
+	}
+	e.run(t, false)
+	lp, err := salbum.Load(e.albumFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lp.UID != uid {
+		t.Errorf("отпечаток копии %q, ждали %q", lp.UID, uid)
+	}
+	if got := lp.ShareRefs(); !slices.Equal(got, want) {
+		t.Errorf("привязки копии %v, ждали %v", got, want)
+	}
+	if got := e.a.editor().ShareRefs(); !slices.Equal(got, want) {
+		t.Errorf("привязки открытого альбома после сбора: %v", got)
+	}
+
+	// Без привязок: копия чистая.
+	bare := newCollectEnv(t, 2)
+	bare.run(t, false)
+	if lp, err = salbum.Load(bare.albumFile()); err != nil || len(lp.ShareRefs()) != 0 {
+		t.Errorf("копия без привязок: %v, %v", lp.ShareRefs(), err)
 	}
 }
 

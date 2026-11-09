@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const go = vi.hoisted(() => ({
   Share: vi.fn(async (_o: unknown) => true),
   ShareState: vi.fn(),
+  ShareFind: vi.fn(),
   ShareConnect: vi.fn(),
   ShareForget: vi.fn(),
   ShareChange: vi.fn(),
@@ -30,13 +31,19 @@ beforeEach(() => vi.clearAllMocks())
 describe('Share: поля models обязательны', () => {
   it('«Продолжить» и «Обновить» (только days) шлют пустые title и password, не undefined', async () => {
     await ShareGo.Share({ days: 0 })
-    expect(go.Share).toHaveBeenCalledWith({ title: '', password: '', days: 0 })
+    expect(go.Share).toHaveBeenCalledWith({ title: '', password: '', days: 0, choice: '' })
     const sent = go.Share.mock.calls[0][0] as Record<string, unknown>
     expect(Object.values(sent).includes(undefined)).toBe(false)
   })
   it('новая ссылка передаёт название, пароль и срок как есть', async () => {
     await ShareGo.Share({ title: 'Свадьба', password: 'лето-1', days: 90 })
-    expect(go.Share).toHaveBeenCalledWith({ title: 'Свадьба', password: 'лето-1', days: 90 })
+    expect(go.Share).toHaveBeenCalledWith({ title: 'Свадьба', password: 'лето-1', days: 90, choice: '' })
+  })
+  it('choice экрана moved доходит до Go: update и new', async () => {
+    await ShareGo.Share({ days: 0, choice: 'update' })
+    expect(go.Share).toHaveBeenLastCalledWith({ title: '', password: '', days: 0, choice: 'update' })
+    await ShareGo.Share({ title: 'Петров', password: '', days: 90, choice: 'new' })
+    expect(go.Share).toHaveBeenLastCalledWith({ title: 'Петров', password: '', days: 90, choice: 'new' })
   })
   it('false («Нет» на вопрос) доходит без изменений', async () => {
     go.Share.mockResolvedValueOnce(false)
@@ -49,6 +56,15 @@ describe('вид из ответа Go', () => {
     go.ShareState.mockResolvedValueOnce(raw(null))
     expect((await ShareGo.ShareState()).link).toBeNull()
     expect(toView({ ...raw(null), link: undefined } as never).link).toBeNull()
+  })
+  it('ShareFind приводит ответ к виду окна: moved и поля find', async () => {
+    const l = { state: 'moved', url: 'u', own: false, from: 'f', here: 'h' }
+    go.ShareFind.mockResolvedValueOnce({ ...raw(l), album: { ...raw(null).album, find: 'lost', findErr: '' } })
+    const v = await ShareGo.ShareFind()
+    expect(go.ShareFind).toHaveBeenCalledTimes(1)
+    expect(v.link?.state).toBe('moved')
+    expect(v.link?.own).toBe(false)
+    expect(v.album.find).toBe('lost')
   })
   it('ссылка копируется, state остаётся строкой Go', async () => {
     const l = { state: 'ok', url: 'u', title: 't', password: '', expiresAt: '', until: '', host: 'h', published: 'p' }

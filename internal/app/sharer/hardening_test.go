@@ -57,7 +57,7 @@ func TestSharePasswordBeforePublish(t *testing.T) {
 		log[1] != "publish" || !strings.Contains(log[2], "expires_at") || strings.Contains(log[2], "password") {
 		t.Errorf("порядок запросов: %q, ждали PATCH пароля, publish, PATCH срока", log)
 	}
-	if rec, _ := r.svc.look(r.curJob().Path); rec.Password != "new-5678" {
+	if rec, _ := r.svc.look(r.curJob().UID); rec.Password != "new-5678" {
 		t.Errorf("пароль записи %q", rec.Password)
 	}
 }
@@ -77,7 +77,7 @@ func TestSharePasswordPatchFailsNoPublish(t *testing.T) {
 			t.Errorf("публикация после упавшего PATCH пароля: %q", get())
 		}
 	}
-	if rec, _ := r.svc.look(r.curJob().Path); rec.Password != "pass-1234" {
+	if rec, _ := r.svc.look(r.curJob().UID); rec.Password != "pass-1234" {
 		t.Errorf("пароль записи %q, ждали прежний", rec.Password)
 	}
 }
@@ -92,7 +92,7 @@ func TestSharePublishFailsAfterPassword(t *testing.T) {
 	if msg, _ := r.run(Options{Password: "new-5678", Days: 90}); msg == "" {
 		t.Fatal("публикация прошла, ждали ошибку")
 	}
-	if rec, _ := r.svc.look(r.curJob().Path); rec.Password != "new-5678" {
+	if rec, _ := r.svc.look(r.curJob().UID); rec.Password != "new-5678" {
 		t.Errorf("пароль записи %q, ждали новый (он уже у сервиса)", rec.Password)
 	}
 }

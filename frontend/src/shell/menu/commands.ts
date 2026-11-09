@@ -102,6 +102,8 @@ async function showDataFolder() {
 // Смена альбома ждёт набранный текст и имена: иначе они уйдут уже в новый альбом (087-5). Вызов Api — внутри then.
 export const openRecent = (path: string) => edit.idle().then(() => store.replaceState(Api.OpenRecent(path)))
 export const openProject = () => edit.idle().then(() => store.replaceState(Api.OpenProject()))
+// 167: «Новый альбом из шаблона…» — диалог и разбор те же, что у «Открыть…» (отмена, окно «Альбом из новой версии»), но альбом без пути и без ссылки.
+export const newTemplate = () => edit.idle().then(() => store.replaceState(Api.NewFromTemplate()))
 
 export async function forgetRecent(path: string) {
   try {
@@ -138,6 +140,7 @@ const HANDLERS = {
   // Файл
   new: () => newDoc.replace(() => Api.NewProject('album')),
   open: () => openProject(),
+  newTemplate: () => newTemplate(),
   openRecent: (_e, path) => path && openRecent(path),
   clearRecent: () => clearRecent(),
   save: () => afterEdit(() => Api.SaveProject()),

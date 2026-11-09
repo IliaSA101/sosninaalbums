@@ -27,13 +27,17 @@ import (
 // Host — что службе нужно от App. Функции и Store обязательны (New паникует с именем пустого).
 type Host struct {
 	Plan func() share.Job // снимок текущего альбома (share.Job): тяжёлый, обходит все фото
-	// Ident — путь ("" — не сохранён) и отпечаток текущего альбома: дешёвый, без Plan. Печать
-	// отпечатка не этого пути — отпечаток "": запись пути для альбома чужая (T4-9).
+	// Ident — путь ("" — не сохранён) и отпечаток текущего альбома: дешёвый, без Plan.
 	Ident func() (path, uid string)
-	// Pin записывает отпечаток uid в файл альбома path, если его там ещё нет (альбом до 0.32):
-	// запись о ссылке без отпечатка в файле после перезапуска стала бы чужой. Печать не этого пути
-	// (Job.Unsealed) — новый отпечаток. Возвращает отпечаток для записи; альбом сменился — ошибка.
-	Pin        func(path, uid string) (string, error)
+	// Pin записывает отпечаток uid в файл альбома path, если его там ещё нет (альбом до 0.32).
+	// fresh — «выгрузить как новый» (167): альбому выдаётся новый отпечаток без привязок, прежняя
+	// запись остаётся за прежним. Возвращает отпечаток для записи; альбом сменился — ошибка.
+	Pin func(path, uid string, fresh bool) (string, error)
+	// Bind кладёт привязку к выгруженному альбому id в файл проекта (167-15): сверка path и uid,
+	// запись — обычным автосохранением App под замком сохранения, не службой.
+	Bind func(path, uid, id string) error
+	// LinkRef — привязка проекта uid к альбому id (model.LinkRef; sharer не видит model).
+	LinkRef    func(uid, id string) string
 	Emit       func(name string, data ...any) // события share:progress и share:done
 	GoBG       func(fn func()) bool           // фон под WaitGroup App; false — App закрывается
 	StopCtx    func() context.Context         // контекст выхода программы: родитель выгрузки
@@ -43,7 +47,7 @@ type Host struct {
 	CheckURL   func(raw string) error         // printprof.CheckURL: ссылка клиенту годна
 	OpenURL    func(url string)               // адрес в браузере
 	Fold       func(path string) string       // paths.Fold: ключ пути без учёта регистра там, где надо
-	CfgDir     func() string                  // папка данных: config.json, shares.json; "" — нет
+	CfgDir     func() string                  // папка данных: config.json, projects.json; "" — нет
 	CacheDir   func() string                  // папка кэша программы (<кэш>/<папка программы>); "" — нет
 	// Store — один на процесс (контракт secret.System): память запасного пути и пауза после
 	// тайм-аута живут в нём.
@@ -76,13 +80,15 @@ type Service struct {
 	// поздняя запись Change и пометка «нет на сервере» не пишутся (netAlive).
 	netPath string
 	netStop bool
-	mem     map[string]prefs.ShareRecord // записи, которые не удалось записать на диск (ключ — Fold(путь))
-	// del — записи, которые не удалось стереть на диске (ключ — Fold(путь), значение — путь): look
-	// их не видит, стереть пробует снова (look, удачный putIf).
-	del   map[string]string
+	netText string                         // отказ выгрузке, пока флаг net стоит (правка или поиск)
+	mem     map[string]prefs.ProjectRecord // записи, которые не удалось записать на диск (ключ — uid)
+	// del — записи, которые не удалось стереть на диске (ключ — uid): look их не видит, стереть
+	// пробует снова (look, удачный putIf).
+	del   map[string]struct{}
 	lim   map[string]albums.Limits // пределы сервиса по origin из последнего Health
-	sh    *prefs.Shares
-	shDir string
+	fnd   map[string]findState     // итог поиска на сервисе за сессию (ключ — uid), find.go
+	pr    *prefs.Projects
+	prDir string
 }
 
 // runState — идущая выгрузка: снятый на старте путь (разбор В1) и остановка.
@@ -104,7 +110,7 @@ func New(h Host) *Service {
 		}
 	}
 	return &Service{h: h, now: time.Now, wait: sleep, gap: 100 * time.Millisecond, after: realAfter,
-		mem: map[string]prefs.ShareRecord{}, del: map[string]string{}, lim: map[string]albums.Limits{}}
+		mem: map[string]prefs.ProjectRecord{}, del: map[string]struct{}{}, lim: map[string]albums.Limits{}, fnd: map[string]findState{}}
 }
 
 func sleep(ctx context.Context, d time.Duration) error {
@@ -170,83 +176,69 @@ func (s *Service) checkLink(raw string) error {
 	return share.CheckLoopbackLink(raw, s.h.AllowLoopback)
 }
 
-// shares — записи выгрузок; пересоздаются, если папка данных сменилась (startup ставит её позже New).
-func (s *Service) shares() *prefs.Shares {
+// projects — записи выгрузок по uid; пересоздаются, если папка данных сменилась (startup ставит её позже New).
+func (s *Service) projects() *prefs.Projects {
 	dir := s.h.CfgDir()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.sh == nil || s.shDir != dir {
-		s.sh, s.shDir = prefs.NewShares(dir, s.rules()), dir
+	if s.pr == nil || s.prDir != dir {
+		s.pr, s.prDir = prefs.NewProjects(dir, s.rules()), dir
 	}
-	return s.sh
+	return s.pr
 }
 
-// get — запись альбома path с отпечатком uid (T4-9). Запись другого проекта на этом пути
-// (отпечаток не совпал или пуст: файл заменили, восстановили чужую копию, shares.json не
-// стёрся) — ok=false, foreign=true: по ней не ходят, ссылка — только новая и после вопроса.
-func (s *Service) get(path, uid string) (rec prefs.ShareRecord, ok, foreign bool) {
-	rec, had := s.look(path)
-	switch {
-	case !had:
-		return prefs.ShareRecord{}, false, false
-	case uid == "" || rec.UID != uid:
-		return prefs.ShareRecord{}, false, true
+// look — запись проекта uid как есть: сначала та, что не легла на диск (она новее), затем файл.
+// Запись, которую не удалось стереть на диске (drop), не возвращается; стереть её пробуем снова —
+// короткий сбой (замок антивируса) так рассасывается.
+func (s *Service) look(uid string) (prefs.ProjectRecord, bool) {
+	if uid == "" {
+		return prefs.ProjectRecord{}, false
 	}
-	return rec, true, false
-}
-
-// ownUID — отпечаток снимка для сверки записи пути: печать не этого пути — "" (запись чужая, T4-9).
-func ownUID(j share.Job) string {
-	if j.Unsealed {
-		return ""
-	}
-	return j.UID
-}
-
-// look — запись пути как есть: сначала та, что не легла на диск (она новее), затем файл. Запись,
-// которую не удалось стереть на диске (drop), не возвращается: на пути уже другой проект; стереть
-// её пробуем снова — короткий сбой (замок антивируса) так рассасывается.
-func (s *Service) look(path string) (prefs.ShareRecord, bool) {
-	if path == "" {
-		return prefs.ShareRecord{}, false
-	}
-	sh := s.shares() // берёт mu сам: до Lock
-	key := s.h.Fold(path)
+	pr := s.projects() // берёт mu сам: до Lock
 	s.mu.Lock()
-	rec, ok := s.mem[key]
-	_, gone := s.del[key]
+	rec, ok := s.mem[uid]
+	_, gone := s.del[uid]
 	if gone {
-		s.retryDel(sh, key)
+		s.retryDel(pr, uid)
 	}
+	_, gone = s.del[uid]
 	s.mu.Unlock()
 	switch {
 	case ok:
 		return rec, true
 	case gone:
-		return prefs.ShareRecord{}, false
+		return prefs.ProjectRecord{}, false
 	}
-	return sh.Get(path)
+	return pr.Get(uid)
 }
 
-// retryDel повторяет стирание записей с меткой del (только keys; пусто — все). Под mu: порядок
-// замков тот же, что у putIf и drop (mu, затем замок shares.json).
-func (s *Service) retryDel(sh *prefs.Shares, keys ...string) {
-	if len(keys) == 0 {
-		keys = slices.Collect(maps.Keys(s.del))
+// get — запись проекта uid и её отношение к файлу path (167-12): own — запись привязана к этому
+// пути. Не своя запись (копия, перенос, другой компьютер) не даёт ни пароля, ни названия, ни
+// правки и отзыва — только вопрос «обновить или как новый».
+func (s *Service) get(path, uid string) (rec prefs.ProjectRecord, had, own bool) {
+	rec, had = s.look(uid)
+	return rec, had, had && rec.Own(path)
+}
+
+// retryDel повторяет стирание записей с меткой del (только uids; пусто — все). Под mu: порядок
+// замков тот же, что у putIf и drop (mu, затем замок projects.json).
+func (s *Service) retryDel(pr *prefs.Projects, uids ...string) {
+	if len(uids) == 0 {
+		uids = slices.Collect(maps.Keys(s.del))
 	}
-	for _, k := range keys {
-		if p, ok := s.del[k]; ok && sh.Delete(p) == nil {
-			delete(s.del, k)
+	for _, u := range uids {
+		if _, ok := s.del[u]; ok && pr.Delete(u) == nil {
+			delete(s.del, u)
 		}
 	}
 }
 
-// put пишет запись. Не вышло записать на диск (shares.json новее программы, не прочитан, переполнен,
+// put пишет запись. Не вышло записать на диск (projects.json новее программы, не прочитан, переполнен,
 // не сохранился) — запись остаётся в памяти до выхода: ссылку видно и копируется, а ошибка
 // возвращается (0.32-146-T3-7 п. 2, не теряем молча). Негодная запись (ErrShareRecord) в память
 // не идёт: это ошибка программы, а не диска.
-func (s *Service) put(path string, rec prefs.ShareRecord) error {
-	_, err := s.putIf(path, rec, nil)
+func (s *Service) put(uid string, rec prefs.ProjectRecord) error {
+	_, err := s.putIf(uid, rec, nil)
 	return err
 }
 
@@ -261,41 +253,38 @@ func (s *Service) own(ctx context.Context, run *runState) func() bool {
 
 // putIf — put, который под mu сверяется с alive: запись, опоздавшая к смене проекта на пути, не
 // пишется (wrote=false), и последний put хода не воскрешает запись прежнего альбома. nil — без сверки.
-func (s *Service) putIf(path string, rec prefs.ShareRecord, alive func() bool) (wrote bool, err error) {
-	sh := s.shares() // берёт mu сам: до Lock
-	key := s.h.Fold(path)
+func (s *Service) putIf(uid string, rec prefs.ProjectRecord, alive func() bool) (wrote bool, err error) {
+	pr := s.projects() // берёт mu сам: до Lock
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if alive != nil && !alive() {
 		return false, nil
 	}
-	err = sh.Put(path, rec)
+	err = pr.Put(uid, rec)
 	switch {
 	case err == nil:
-		delete(s.mem, key)
-		delete(s.del, key)
-		s.retryDel(sh) // диск снова пишется: стираем и записи, что не стёрлись раньше
-	case !errors.Is(err, prefs.ErrShareRecord) && !errors.Is(err, prefs.ErrSharePath):
-		s.mem[key] = rec
-		delete(s.del, key)
+		delete(s.mem, uid)
+		delete(s.del, uid)
+		s.retryDel(pr) // диск снова пишется: стираем и записи, что не стёрлись раньше
+	case !errors.Is(err, prefs.ErrShareRecord) && !errors.Is(err, prefs.ErrProjectUID):
+		s.mem[uid] = rec
+		delete(s.del, uid)
 	}
 	return true, err
 }
 
-// drop убирает запись альбома (диск и память). Не вышло стереть на диске (файл новее, занят, диск
-// полон) — ставится метка «сброшена»: иначе get снова нашёл бы запись прежнего проекта на этом пути
-// (аудит 0.32-146-T4-8).
-func (s *Service) drop(path string) error {
-	sh := s.shares()
-	key := s.h.Fold(path)
+// drop убирает запись проекта (диск и память). Не вышло стереть на диске (файл новее, занят, диск
+// полон) — ставится метка «сброшена»: иначе look снова нашёл бы запись (аудит 0.32-146-T4-8).
+func (s *Service) drop(uid string) error {
+	pr := s.projects()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.mem, key)
-	err := sh.Delete(path)
+	delete(s.mem, uid)
+	err := pr.Delete(uid)
 	if err != nil {
-		s.del[key] = path
+		s.del[uid] = struct{}{}
 	} else {
-		delete(s.del, key)
+		delete(s.del, uid)
 	}
 	return err
 }
@@ -347,7 +336,7 @@ func hostOf(origin string) string {
 	return origin
 }
 
-// tokenLost — токен не подошёл: убираем его из хранилища (записи shares.json целы), пишем в журнал.
+// tokenLost — токен не подошёл: убираем его из хранилища (записи projects.json целы), пишем в журнал.
 func (s *Service) tokenLost(origin string) {
 	if err := s.h.Store.Delete(origin); err != nil {
 		log.Printf("выгрузка: токен убран из программы, но не из системного хранилища")

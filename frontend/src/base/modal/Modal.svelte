@@ -42,10 +42,28 @@
     me = id
     return () => modalStack.remove(id)
   })
-  // Фокус в окне: Esc и Enter ловит оно, а не страница под ним. Поле с data-autofocus получает его первым.
+  // Фокус в окне: Esc и Enter ловит оно, а не страница под ним. Поле с data-autofocus (любым значением) получает его первым.
   // Окно под закрывшимся верхним забирает фокус обратно.
   $effect(() => {
     if (box && top) (box.querySelector<HTMLElement>('[data-autofocus]') ?? box).focus()
+  })
+  // Содержимое окна меняется на месте (экран сменился, кнопка с фокусом исчезла): фокус переставляем только на цель с пометкой
+  // data-autofocus="screen". Без пометки нельзя: после «Выгрузить» или «Собрать» фокус ушёл бы на «Остановить», и второй Enter
+  // остановил бы работу; после «Скачать» — на «Закрыть», и Пробел закрыл бы окно. Открытие окна пометки не требует.
+  // Фокус трогаем, только если он потерян (body, снятый узел) или стоит на самом окне, а цель только что появилась, — набираемый текст не отбираем.
+  $effect(() => {
+    const el = box
+    if (!el || !top) return
+    const mo = new MutationObserver((list) => {
+      const target = el.querySelector<HTMLElement>('[data-autofocus="screen"]')
+      if (!target) return
+      const ae = document.activeElement
+      const lost = !ae || ae === document.body || ae === document.documentElement || !ae.isConnected
+      const added = list.some((m) => Array.from(m.addedNodes).some((n) => n === target || (n instanceof Element && n.contains(target))))
+      if (lost || (ae === el && added)) target.focus()
+    })
+    mo.observe(el, { childList: true, subtree: true })
+    return () => mo.disconnect()
   })
 </script>
 

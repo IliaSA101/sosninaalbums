@@ -300,7 +300,8 @@ func TestWebEmptyAndSingle(t *testing.T) {
 	}
 }
 
-// Обложка: лицевая — зона front, задняя — back; каждая в своём файле, без корешка и заворота.
+// Обложка: лицевая — зона front, задняя — back; каждая в своём файле, без корешка и заворота,
+// в px обычной страницы (0.37.1-1: заполнение, срез по бокам).
 func TestWebCoverSides(t *testing.T) {
 	front := layout.Rect{X: 120, Y: 10, W: 90, H: 70}
 	back := layout.Rect{X: 5, Y: 10, W: 90, H: 70}
@@ -324,13 +325,13 @@ func TestWebCoverSides(t *testing.T) {
 		t.Errorf("прогресс %v из %v: обложка — один лист", done, totals)
 	}
 	f, b := decodeJPEG(t, filepath.Join(dir, "000.jpg")), decodeJPEG(t, filepath.Join(dir, "003.jpg"))
-	if fb := f.Bounds(); fb.Dx() != 900 || fb.Dy() != 700 {
-		t.Errorf("лицевая %v: размер зоны, а не страницы", fb)
+	if fb := f.Bounds(); fb.Dx() != 970 || fb.Dy() != 540 {
+		t.Errorf("лицевая %v: ждали px страницы 970×540", fb)
 	}
-	if bb := b.Bounds(); bb.Dx() != 900 || bb.Dy() != 700 {
+	if bb := b.Bounds(); bb.Dx() != 970 || bb.Dy() != 540 {
 		t.Errorf("задняя %v", bb)
 	}
-	for _, p := range [][2]int{{5, 5}, {450, 350}, {895, 695}, {5, 695}, {895, 5}} {
+	for _, p := range [][2]int{{5, 5}, {485, 270}, {965, 535}, {5, 535}, {965, 5}} {
 		if !nearRGB(f, p[0], p[1], red) {
 			t.Errorf("лицевая в %v не красная: корешок или заворот попал в кадр", p)
 		}
@@ -576,5 +577,132 @@ func TestWebKeepsForeign(t *testing.T) {
 	}
 	if got := names(readAll(t, dir)); !slices.Equal(got, []string{"001.jpg", "notes.txt"}) {
 		t.Fatalf("файлы %v", got)
+	}
+}
+
+// coverJob100 — обложка со сторонками front/back размера fw×fh мм на странице 100×60 (обрез 3, 10 px/мм):
+// сторонка front залита красным с меткой mark в центре, back — синим.
+func coverJob100(fw, fh float64, mark color.RGBA) (WebSpec, *CoverJob) {
+	front := layout.Rect{X: 120, Y: 10, W: fw, H: fh}
+	back := layout.Rect{X: 5, Y: 10, W: fw, H: fh}
+	w := WebSpec{DPI: 254, PageW: 100, PageH: 60, BleedX: 3, BleedY: 3, Front: front, Back: back}
+	sheet := render.Spread{Bg: [2]color.RGBA{cream, cream}, Plates: []render.Plate{
+		plate(back.X, back.Y, back.W, back.H, blue),
+		plate(front.X, front.Y, front.W, front.H, red),
+		plate(front.X+fw/2-5, front.Y+fh/2-5, 10, 10, mark),
+	}}
+	return w, &CoverJob{Spread: sheet, Opt: render.Options{PageW: 130, PageH: 90, DPI: 20, Quality: 95}}
+}
+
+// Сторонка другой пропорции (квадрат при странице 97×54): px front и back равны px обычной
+// страницы той же выгрузки, метка в центре сторонки остаётся в центре страницы.
+func TestWebCoverFillsPage(t *testing.T) {
+	w, job := coverJob100(70, 70, green)
+	dir := webDir(t)
+	spreads := []render.Spread{{Bg: [2]color.RGBA{cream, cream}}}
+	if _, err := RunWeb(context.Background(), spreads, job, w, dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	page := jpegSize(t, filepath.Join(dir, "001.jpg"))
+	for _, n := range []string{"000.jpg", "003.jpg"} {
+		if c := jpegSize(t, filepath.Join(dir, n)); c.Width != page.Width || c.Height != page.Height {
+			t.Errorf("%s: %d×%d, страница %d×%d", n, c.Width, c.Height, page.Width, page.Height)
+		}
+	}
+	f := decodeJPEG(t, filepath.Join(dir, "000.jpg"))
+	cx, cy := page.Width/2, page.Height/2
+	if !nearRGB(f, cx, cy, green) {
+		t.Errorf("метка не в центре страницы (%d,%d)", cx, cy)
+	}
+	// Срез только сверху и снизу сторонки: квадрат 700×700 → окно 700×389 по центру; метка 100 px
+	// после масштаба 970/700 = 138 px, значит за её границей (центр ± 80) красный.
+	for _, p := range [][2]int{{cx - 80, cy}, {cx + 80, cy}, {cx, cy - 80}, {cx, cy + 80}, {2, 2}, {page.Width - 3, page.Height - 3}} {
+		if !nearRGB(f, p[0], p[1], red) {
+			t.Errorf("в %v не красный фон сторонки", p)
+		}
+	}
+	if nearRGB(f, cx-60, cy, red) || nearRGB(f, cx, cy+60, red) {
+		t.Error("метка уже ожидаемой: масштаб не по формату страницы")
+	}
+}
+
+// Сторонка шире страницы: срез по бокам, высота страницы — вся высота сторонки.
+func TestWebCoverWiderSide(t *testing.T) {
+	w, job := coverJob100(120, 40, green)
+	dir := webDir(t)
+	if _, err := RunWeb(context.Background(), []render.Spread{{Bg: [2]color.RGBA{cream, cream}}}, job, w, dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	page := jpegSize(t, filepath.Join(dir, "001.jpg"))
+	b := jpegSize(t, filepath.Join(dir, "003.jpg"))
+	if b.Width != page.Width || b.Height != page.Height {
+		t.Fatalf("задняя %d×%d, страница %d×%d", b.Width, b.Height, page.Width, page.Height)
+	}
+	f := decodeJPEG(t, filepath.Join(dir, "000.jpg"))
+	// Окно 1200×400, страница 970×540 (1,796): берётся 718×400, метка 100 px → 135 px.
+	if !nearRGB(f, page.Width/2, page.Height/2, green) || !nearRGB(f, page.Width/2+80, page.Height/2, red) {
+		t.Error("метка не по центру или масштаб не по высоте сторонки")
+	}
+}
+
+// Белая сторонка — Blank, файла нет; вторая сторонка пишется. Без обложки страницы прежние.
+func TestWebCoverBlankSide(t *testing.T) {
+	w, job := coverJob100(70, 70, green)
+	job.Spread.Plates = job.Spread.Plates[:1] // front не закрашена: кремовый фон листа, не белый
+	job.Spread.Bg = [2]color.RGBA{white, white}
+	dir := webDir(t)
+	pages, err := RunWeb(context.Background(), []render.Spread{{Bg: [2]color.RGBA{cream, cream}}}, job, w, dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pages[0].Blank || pages[3].Blank {
+		t.Errorf("front белая, back синяя: %+v", pages)
+	}
+	if got := names(readAll(t, dir)); slices.Contains(got, "000.jpg") || !slices.Contains(got, "003.jpg") {
+		t.Errorf("файлы %v", got)
+	}
+}
+
+// fillCrop: наибольший прямоугольник пропорции страницы по центру окна; край и вырождение.
+func TestFillCrop(t *testing.T) {
+	cases := []struct {
+		win    image.Rectangle
+		pw, ph int
+		want   image.Rectangle
+	}{
+		{image.Rect(10, 20, 110, 120), 200, 100, image.Rect(10, 45, 110, 95)}, // квадрат → шире страницы
+		{image.Rect(0, 0, 400, 100), 200, 100, image.Rect(100, 0, 300, 100)},  // шире страницы
+		{image.Rect(0, 0, 200, 100), 200, 100, image.Rect(0, 0, 200, 100)},    // та же пропорция
+		{image.Rect(5, 5, 6, 6), 970, 540, image.Rect(5, 5, 6, 6)},            // окно в пиксель
+		{image.Rect(0, 0, 1000, 1), 1, 1000, image.Rect(499, 0, 500, 1)},      // сверхузкая страница
+	}
+	for _, c := range cases {
+		got := fillCrop(c.win, c.pw, c.ph)
+		if got != c.want {
+			t.Errorf("fillCrop(%v, %d:%d) = %v, ждали %v", c.win, c.pw, c.ph, got, c.want)
+		}
+		if !got.In(c.win) || got.Empty() {
+			t.Errorf("fillCrop(%v) = %v вне окна или пусто", c.win, got)
+		}
+	}
+}
+
+// Размер страницы обложки совпадает с окном spread() для любого dpi и обреза (одна функция).
+func TestWebPagePxMatchesSpread(t *testing.T) {
+	for _, dpi := range []int{20, 97, 136, 254} {
+		for _, b := range [][2]float64{{0, 0}, {3, 3}, {2.5, 0.7}} {
+			w := WebSpec{DPI: dpi, PageW: 297 + b[0], PageH: 299 + 2*b[1], BleedX: b[0], BleedY: b[1]}
+			r := webRun{w: w}
+			opt := r.opt()
+			opt.Split = true
+			cw, ch := render.CanvasSize(opt)
+			wins := r.pageWins(cw, ch)
+			pw, ph := r.pagePx()
+			for _, win := range wins {
+				if win.Dx() != pw || win.Dy() != ph {
+					t.Errorf("dpi %d обрез %v: окно %v, pagePx %d×%d", dpi, b, win, pw, ph)
+				}
+			}
+		}
 	}
 }

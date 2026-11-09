@@ -46,6 +46,7 @@ const ctrl = (type: 'keydown' | 'keyup', held: boolean) => {
 }
 
 beforeEach(() => {
+  window.dispatchEvent(new Event('blur')) // модульный «последний Ctrl» между тестами не переносим
   gapKey.held = false
   row.moving = false
   setView(['a', 'b', 'c'], 1)

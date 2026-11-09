@@ -12,10 +12,10 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 )
 
-// replayIdent — отпечаток альбома: файл записан шагами сценария (NeedUID false), устаревший
+// replayIdent — отпечаток альбома: файл записан шагами сценария (NeedFileUID false), устаревший
 // отпечаток — отказ; восстановление копии без отпечатка без записи — новый отпечаток, его
-// записывает SaveUID (без печати пути — выдаёт новый с печатью); Ctrl+Z возвращает прежний;
-// «Сохранить как» другим проектом — новый.
+// записывает SaveFresh; Ctrl+Z возвращает прежний (SaveFileUID: запись в файл, если его там нет); «Сохранить как»
+// другим проектом (SaveOver) — новый. Печать пути решений не принимает (167): шагов сверки нет.
 func replayIdent(r *replay) {
 	e := r.e
 	marks := map[string]string{}
@@ -33,23 +33,14 @@ func replayIdent(r *replay) {
 		r.read(name, []string{strings.Replace(path, r.dir, "<dir>", 1), mark(uid)})
 		return path, uid
 	}
-	share := func(name string) { // отпечаток для записи о ссылке: "" — печать не этого пути
-		path, uid := e.ShareIdent()
-		own := ""
-		if uid != "" {
-			own = mark(uid)
-		}
-		r.read(name, []string{strings.Replace(path, r.dir, "<dir>", 1), own})
-	}
 	need := func(name, path, uid string) {
-		n, err := e.NeedUID(path, uid)
+		n, err := e.NeedFileUID(path, uid)
 		r.read(name, []any{n, fmt.Sprint(err)})
 	}
 	path, u1 := ident("Ident")
-	share("ShareIdent:записан без выдачи")
-	need("NeedUID", path, u1)
-	need("NeedUID:чужой", path, strings.Repeat("0", 32))
-	need("NeedUID:другой путь", filepath.Join(r.dir, "другой.salbum"), u1)
+	need("NeedFileUID", path, u1)
+	need("NeedFileUID:чужой", path, strings.Repeat("0", 32))
+	need("NeedFileUID:другой путь", filepath.Join(r.dir, "другой.salbum"), u1)
 
 	q, _ := e.Snapshot()
 	q.UID = ""
@@ -57,24 +48,28 @@ func replayIdent(r *replay) {
 		r.t.Fatalf("Restore: %v", err)
 	}
 	_, u2 := ident("Ident:после восстановления")
-	need("NeedUID:после восстановления", path, u2)
-	u2, err := e.SaveUID(path, u2) // отпечаток без печати пути — выдан новый с печатью
-	r.write("SaveUID", err, path)
+	need("NeedFileUID:после восстановления", path, u2)
+	u2, err := e.SaveFresh(path, u2) // новый отпечаток с печатью пути, файл записан
+	r.write("SaveFresh", err, path)
 	ident("Ident:выдан")
-	share("ShareIdent:выдан")
-	need("NeedUID:записан", path, u2)
-	_, err = e.SaveUID(path, u1)
-	r.read("SaveUID:устаревший", fmt.Sprint(err))
+	need("NeedFileUID:записан", path, u2)
+	_, err = e.SaveFresh(path, u1)
+	r.read("SaveFresh:устаревший", fmt.Sprint(err))
 
 	r.do("Undo:отпечаток", e.Undo())
 	ident("Ident:после отмены")
+	need("NeedFileUID:после отмены", path, u1)
+	back, err := e.SaveFileUID(path, u1)
+	r.read("SaveFileUID", []any{mark(back), fmt.Sprint(err)})
+	need("NeedFileUID:после SaveFileUID", path, u1)
 
 	other := filepath.Join(r.dir, "новый.salbum")
-	r.write("SaveNew", e.SaveNew(other), other)
+	fresh, err := e.SaveOver(other)
+	r.write("SaveOver", err, other)
 	_, u3 := ident("Ident:сохранить как")
-	share("ShareIdent:сохранить как")
-	need("NeedUID:сохранить как", other, u3)
+	r.read("SaveOver:новый", fresh)
+	need("NeedFileUID:сохранить как", other, u3)
 
-	at, q2, _, sealed := e.SnapshotAt() // путь, отпечаток и печать снимка выгрузки — от одного альбома
-	r.read("SnapshotAt", []any{strings.Replace(at, r.dir, "<dir>", 1), mark(q2.UID), sealed})
+	at, q2, _, refs := e.SnapshotAt() // путь, отпечаток и привязки снимка выгрузки — от одного альбома
+	r.read("SnapshotAt", []any{at == other, mark(q2.UID), len(refs)})
 }

@@ -16,10 +16,13 @@ const revokeQuestion = "Отозвать ссылку? Клиент больше
 // target — запись альбома path с отпечатком uid, с которой можно работать по сети: ссылка есть,
 // запись этого проекта (T4-9) и того же сервиса, что подключён (С2: по чужой записи запросов нет).
 // Вызывать под holdNet.
-func (s *Service) target(path, uid string) (origin, token string, rec prefs.ShareRecord, err error) {
-	var ok bool
-	if rec, ok, _ = s.get(path, uid); !ok || rec.ID == "" {
+func (s *Service) target(path, uid string) (origin, token string, rec prefs.ProjectRecord, err error) {
+	rec, ok, own := s.get(path, uid)
+	switch {
+	case !ok || rec.ID == "":
 		return "", "", rec, fail("У этого альбома нет ссылки")
+	case !own: // чужая запись (167-12): ни правки, ни отзыва, только выбор в окне
+		return "", "", rec, fail(chooseText)
 	}
 	if origin, token, err = s.need(); err != nil {
 		return "", "", rec, err
@@ -46,7 +49,7 @@ func (s *Service) afterNet(phase, path, uid, origin string, err error) error {
 // закрывает прежние входы клиентов (revoke_sessions). Нечего менять — холостой вызов без запроса.
 func (s *Service) Change(c Change) (View, error) {
 	path, uid := s.h.Ident()
-	release, err := s.holdNet(path)
+	release, err := s.holdNet(path, netBusyText)
 	if err != nil {
 		return View{}, err
 	}
@@ -72,7 +75,7 @@ func (s *Service) Change(c Change) (View, error) {
 				return View{}, err
 			}
 		}
-		if c.Password != rec.Password { // тот же пароль: ничего не шлём, входы клиента не сбрасываем (159)
+		if c.Password != rec.Password || rec.PassUnknown { // тот же пароль: ничего не шлём, входы клиента не сбрасываем (159)
 			pw := c.Password
 			p.Password, p.RevokeSessions = &pw, true
 		}
@@ -92,9 +95,9 @@ func (s *Service) Change(c Change) (View, error) {
 	}
 	rec.ExpiresAt, rec.Gone = al.ExpiresAt, false // сервис альбом знает: «нет на сервере» снимается
 	if p.Password != nil {
-		rec.Password = *p.Password
+		rec.Password, rec.PassUnknown = *p.Password, false
 	}
-	wrote, perr := s.putIf(path, rec, s.netAlive)
+	wrote, perr := s.putIf(uid, rec, s.netAlive)
 	if !wrote { // пока шёл PATCH, на путь лёг другой проект: запись прежнего не возвращаем
 		log.Printf("выгрузка: альбом сохранён заново во время правки ссылки, запись не возвращена")
 		v, _ := s.State() // новый пароль или срок уже на сервере — молчать нельзя
@@ -111,7 +114,7 @@ func (s *Service) Change(c Change) (View, error) {
 // уже не знает альбома (404) — запись тоже удаляется: клиент ссылку не откроет.
 func (s *Service) Revoke() (View, error) {
 	path, uid := s.h.Ident()
-	release, err := s.holdNet(path) // и на время вопроса: пока диалог открыт, Share не стартует
+	release, err := s.holdNet(path, netBusyText) // и на время вопроса: пока диалог открыт, Share не стартует
 	if err != nil {
 		return View{}, err
 	}
@@ -135,7 +138,7 @@ func (s *Service) Revoke() (View, error) {
 		return View{}, s.afterNet("отзыв ссылки", path, uid, origin, err)
 	}
 	s.dropKeptFor(path) // ссылки нет — «Продолжить» нечего досылать, фото клиента не держим (159)
-	if err := s.drop(path); err != nil {
+	if err := s.drop(uid); err != nil {
 		v, _ := s.State()
 		return v, fail("Ссылка отозвана, но запись о ней убрать не удалось: " + err.Error())
 	}

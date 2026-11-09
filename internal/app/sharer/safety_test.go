@@ -84,10 +84,10 @@ func TestShareSwitchAlbum(t *testing.T) {
 	if msg, stopped := r.wait(); msg != "" || stopped {
 		t.Fatalf("итог: %q %v", msg, stopped)
 	}
-	if _, ok := r.svc.look(pathB); ok {
+	if _, ok := r.svc.look(uidOf(pathB)); ok {
 		t.Error("запись появилась у альбома B")
 	}
-	if rec, ok := r.svc.look(pathA); !ok || rec.URL == "" || rec.Title != "a" {
+	if rec, ok := r.svc.look(uidOf(pathA)); !ok || rec.URL == "" || rec.Title != "a" {
 		t.Errorf("запись A: %+v %v", rec, ok)
 	}
 	if v := r.state(); v.Link != nil || v.Other || v.Busy {
@@ -95,22 +95,20 @@ func TestShareSwitchAlbum(t *testing.T) {
 	}
 }
 
-// С1: сохранение другого проекта по пути с записью сбрасывает запись; тот же проект — нет.
+// С1 (167-10): сохранение другого проекта по пути записи не стирает (они по uid), но останавливает
+// идущую выгрузку этого пути.
 func TestShareSaveAsOverwrite(t *testing.T) {
 	r := newRig(t)
 	r.connect()
 	r.must(Options{Days: 30})
-	path := r.curJob().Path
+	path, uid := r.curJob().Path, r.curJob().UID
 	r.svc.OnSaved(path, false)
-	if _, ok := r.svc.look(path); !ok {
-		t.Fatal("обычное сохранение сбросило запись")
-	}
 	r.svc.OnSaved(path, true)
-	if _, ok := r.svc.look(path); ok {
-		t.Error("запись пережила «Сохранить как» поверх файла")
+	if _, ok := r.svc.look(uid); !ok {
+		t.Error("«Сохранить как» стёрло запись: она по uid и принадлежит прежнему проекту")
 	}
-	if v := r.state(); v.Link != nil {
-		t.Errorf("окно показывает чужую ссылку: %+v", v.Link)
+	if v := r.state(); v.Link == nil || !v.Link.Own {
+		t.Errorf("запись проекта пропала из окна: %+v", v.Link)
 	}
 	// Идущая выгрузка этого пути останавливается.
 	r2 := newRig(t)
@@ -248,7 +246,7 @@ func TestShareToken401(t *testing.T) {
 	if token != "" || origin == "" {
 		t.Errorf("токен %q после 401 (адрес %q)", token, origin)
 	}
-	if _, ok := r.svc.look(path); !ok {
+	if _, ok := r.svc.look(r.curJob().UID); !ok {
 		t.Error("запись пропала")
 	}
 	if v := r.state(); v.Service.Token || v.Service.Host == "" {
@@ -282,7 +280,7 @@ func TestShareBadURL(t *testing.T) {
 		if stopped || !strings.Contains(msg, "ссылку, которую программа не принимает") {
 			t.Errorf("%s: итог %q %v", bad, msg, stopped)
 		}
-		rec, ok := r.svc.look(r.curJob().Path)
+		rec, ok := r.svc.look(r.curJob().UID)
 		if !ok || rec.URL != "" || rec.ID == "" {
 			t.Errorf("%s: запись %+v %v", bad, rec, ok)
 		}
@@ -439,11 +437,11 @@ func TestShareTempCleanup(t *testing.T) {
 	}
 }
 
-// shares.json новее программы: ссылка готова, но не записана — окно её показывает, ошибка видна.
+// projects.json новее программы: ссылка готова, но не записана — окно её показывает, ошибка видна.
 func TestShareRecordNotWritten(t *testing.T) {
 	r := newRig(t)
 	r.connect()
-	if err := os.WriteFile(prefs.SharesPath(r.cfg), []byte(`{"version": 999, "albums": {}}`), 0o600); err != nil {
+	if err := os.WriteFile(prefs.ProjectsPath(r.cfg), []byte(`{"version": 999, "projects": {}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	msg, stopped := r.run(Options{Days: 30})

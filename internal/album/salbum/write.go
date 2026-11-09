@@ -50,19 +50,20 @@ func Encode(p *model.Project, base string) ([]byte, error) {
 // по другому пути её не меняет (146 T4-9).
 func encodeWith(p *model.Project, side model.Side, enc pathEnc) ([]byte, error) {
 	f := FileProject{
-		Version:  model.FormatVersion,
-		App:      appField(curApp()),
-		UID:      p.UID,
-		UIDAt:    sealOf(p),
-		Product:  model.NormProduct(p.Product),
-		Folders:  make([]FileFolder, 0, len(p.Folders)),
-		Settings: p.Settings,
-		Spreads:  p.Spreads,
-		Photos:   make(map[string]FilePhoto, len(p.Photos)),
-		Cover:    encodeCover(p.Cover, enc),
-		Fonts:    p.Fonts, // только названия: файлы шрифтов альбом не несёт (082-8)
-		AlbumBg:  p.AlbumBg,
-		Look:     p.Look,
+		Version:   model.FormatVersion,
+		App:       appField(curApp()),
+		UID:       p.UID,
+		UIDAt:     sealOf(p),
+		ShareRefs: refsOf(p),
+		Product:   model.NormProduct(p.Product),
+		Folders:   make([]FileFolder, 0, len(p.Folders)),
+		Settings:  p.Settings,
+		Spreads:   p.Spreads,
+		Photos:    make(map[string]FilePhoto, len(p.Photos)),
+		Cover:     encodeCover(p.Cover, enc),
+		Fonts:     p.Fonts, // только названия: файлы шрифтов альбом не несёт (082-8)
+		AlbumBg:   p.AlbumBg,
+		Look:      p.Look,
 	}
 	if f.Spreads == nil {
 		f.Spreads = []*model.Spread{}
@@ -129,6 +130,14 @@ func sealOf(p *model.Project) string {
 		return ""
 	}
 	return p.UIDAt()
+}
+
+// refsOf — привязки для записи: только при годном отпечатке (без него они ничьи).
+func refsOf(p *model.Project) refList {
+	if !model.GoodUID(p.UID) {
+		return nil
+	}
+	return p.ShareRefs()
 }
 
 func writeEnc(p *model.Project, path string, side model.Side, enc pathEnc) error {
