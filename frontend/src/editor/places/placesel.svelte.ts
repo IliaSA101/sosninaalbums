@@ -1,0 +1,505 @@
+// Выделение и правка мест без режима (спека 007/008): ref выделенного, предпросмотр до отпускания,
+// действия кнопок и клавиш. Геометрию считает Go; здесь — выделение и вызовы Api.*.
+// Замок пропорций и привязка — настройки окна (localStorage, как modes), в проект не попадают.
+//
+// ref — ID фото (в «Авто» и в сетке) или ID пустого места. Выделение фото в store (selectedCell) —
+// то же самое: первый ref, если это фото.
+import { SvelteMap, SvelteSet } from 'svelte/reactivity'
+import { store, Api } from '../../base/core/store.svelte'
+import { gridAct } from '../../panels/layouts/gridact.svelte'
+import { edit } from '../text/edit.svelte'
+import { selectAll, toggleRef, toggleText, toggleSticker, pruneTexts, pruneStickers, pruneSel, type GroupSel } from './groupsel'
+import { arrowDelta, nudge } from '../../base/geom/grid'
+import { gridSession, refsBoxes, sampleFirst } from '../../base/geom/gridedit'
+import { groupBox, type GxText } from '../../base/groupgeom/groupxf'
+import { frameAngle, groupOBB, mixedAngles, reduce90, type Turn } from '../../base/groupgeom/groupframe'
+import { normDeg } from '../../base/geom/textbox'
+import { liveRadius as radiusOfRound, shapeArg, shapeKey, type ShapeKey } from '../../base/geom/shape'
+import { marqueePick, type Hit } from '../canvas/marquee'
+import { layerTargets } from './layers'
+import { boxOf as stickerBox, nudgeBox } from '../sticker/sticker'
+import { sheetIn } from '../../base/geom/sheet'
+import { allGray as photosGray } from '../../base/geom/tone'
+import type { LayerOp } from './minipanel'
+import type { Rect, RotRect, StickerView } from '../../base/core/types'
+
+// Ключ прежний: у пользователя уже сохранены замок и привязка.
+const KEY = 'gridEdit'
+
+export interface LiveText extends Rect {
+  scale: number
+  rot?: number // повёрнутый группой текст (018); нет — угол из View
+}
+
+class PlaceSel {
+  // Выделенные ref текущего разворота; первый — образец (поля X/Y/Ш/В, толстая рамка).
+  refs = $state<string[]>([])
+  // Тексты группы (2+ объекта, спека 009 U5). Одиночный текст живёт в edit.sel, не здесь. Фона тут нет.
+  texts = $state<string[]>([])
+  // Выделенные стикеры (048): один — одиночное выделение (карточка «Стикер»), 2 и больше или с другими объектами — группа.
+  stickers = $state<string[]>([])
+  // Предпросмотр жеста над стикерами до отпускания кнопки (мм листа, поворот вокруг центра), ключ — ID стикера.
+  liveStickers = $state<Map<string, RotRect> | null>(null)
+  // Предпросмотр переноса/размера до отпускания кнопки (мм разворота), ключ — ref.
+  live = $state<{ spread: string; boxes: Map<string, RotRect> } | null>(null)
+  // Тексты группы в жесте: рамка (угол до поворота, размер) и множитель кегля, ключ — ID текста.
+  liveTexts = $state<Map<string, LiveText> | null>(null)
+  // Голубые направляющие прилипания, мм.
+  guides = $state<{ x: number | null; y: number | null }>({ x: null, y: null })
+  // Последний поворот группы (018): угол рамки, пока выделение и углы членов те же. В проекте угла группы нет.
+  lastTurn = $state<Turn | null>(null)
+  // Угол рамки во время протяжки ⟳ (живой); вне жеста null.
+  liveTurn = $state<number | null>(null)
+  lock = $state(false)
+  snap = $state(true)
+  // Страница, над которой курсор был в последний раз: «+ Место» встаёт на неё.
+  page: 0 | 1 = 0
+
+  // Последнее добавленное щелчком (Shift/Ctrl) — образец «Одинакового размера»; null — первое выделенное.
+  private sample: string | null = null
+  private session = ''
+  private chain: Promise<unknown> = Promise.resolve()
+
+  constructor() {
+    try {
+      const v = JSON.parse(localStorage.getItem(KEY) ?? 'null')
+      if (v && typeof v === 'object') {
+        this.lock = v.lock === true
+        this.snap = v.snap !== false
+      }
+    } catch {
+      // Без хранилища — значения по умолчанию.
+    }
+  }
+
+  private save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ lock: this.lock, snap: this.snap }))
+    } catch {
+      // Без хранилища настройка не запомнится.
+    }
+  }
+
+  toggleLock() {
+    this.lock = !this.lock
+    this.save()
+  }
+
+  toggleSnap() {
+    this.snap = !this.snap
+    this.save()
+  }
+
+  // Выделенное на текущем развороте с рамками (образец первым); исчезнувшее отбрасывается.
+  // id у каждого — то, что принимает Go: ID места (сетка) или фото («Авто»).
+  selected = $derived(refsBoxes(store.spread, this.refs))
+
+  // Выделенные стикеры текущего листа в порядке выделения; исчезнувшие отброшены.
+  selectedStickers = $derived.by(() => {
+    const list = store.spread?.stickers ?? []
+    return this.stickers.flatMap((id) => list.find((x) => x.id === id) ?? [])
+  })
+
+  // Места, стикеры и тексты с ids (ID текстов; чужие ID отбрасываются) с живым предпросмотром жеста.
+  // Стикер для геометрии группы — то же, что место: повёрнутая вокруг центра рамка (после мест).
+  private liveMembers(ids: string[]): { places: RotRect[]; texts: GxText[] } {
+    const s = store.spread
+    if (!s) return { places: [], texts: [] }
+    const live = this.live?.spread === s.id ? this.live.boxes : null
+    const liveT = this.liveTexts
+    const liveS = this.liveStickers
+    return {
+      places: [
+        ...this.selected.map((b) => live?.get(b.id) ?? b),
+        ...this.selectedStickers.map((t) => liveS?.get(t.id) ?? { x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot }),
+      ],
+      texts: s.texts
+        .filter((t) => ids.includes(t.id))
+        .map((t) => {
+          const l = liveT?.get(t.id)
+          return { x: l?.x ?? t.x, y: l?.y ?? t.y, w: l?.w ?? t.w, h: l?.h ?? t.h, rot: l?.rot ?? t.rot, size: t.style.size }
+        }),
+    }
+  }
+
+  // Описанный прямоугольник выделенных мест и текстов с ids (линейки): с живым предпросмотром. Нет выделенного — null.
+  boxOf(ids: string[]): Rect | null {
+    if (!store.spread) return null
+    const m = this.liveMembers(ids)
+    return groupBox(m.places, m.texts)
+  }
+
+  // Ключ выделения для угла рамки: разворот, refs и тексты группы.
+  key = $derived(
+    `${store.spread?.id}|${[...this.refs, ...this.texts.map((t) => 't:' + t), ...this.stickers.map((t) => 's:' + t)].sort().join(',')}`,
+  )
+
+  // Текущие (не живые) углы членов группы: ID → °.
+  private rots(): Map<string, number> {
+    const m = new SvelteMap<string, number>()
+    for (const i of this.selected) m.set(i.id, i.rot ?? 0)
+    for (const t of store.spread?.texts ?? []) if (this.texts.includes(t.id)) m.set(t.id, t.rot)
+    for (const t of this.selectedStickers) m.set(t.id, t.rot)
+    return m
+  }
+
+  // Угол рамки группы φ (спека 018 §2): живой при протяжке ⟳, иначе последний поворот, иначе общий угол членов, иначе 0.
+  phi = $derived(this.liveTurn ?? frameAngle(this.lastTurn, this.key, this.rots()))
+  // У членов разные углы и поворота нет — подсказка поля «Угол».
+  mixed = $derived(this.liveTurn === null && mixedAngles(this.rots()))
+
+  // Рамка группы: описанный прямоугольник в осях φ (рисует GroupFrame, поля карточки, мини-панель), с живым предпросмотром.
+  frame = $derived.by(() => {
+    const m = this.liveMembers(this.texts)
+    return groupOBB(m.places, m.texts, reduce90(this.phi))
+  })
+
+  // После RotateGroup: запомнить угол рамки с углами членов из свежего вида (вызывать после обновления store).
+  // key — ключ выделения, снятый ДО вызова Go: за ожидание выделение могло смениться, тогда поворот забывается.
+  noteTurn(deg: number, key: string) {
+    if (key !== this.key) return
+    this.lastTurn = { key, deg: normDeg(deg), rots: this.rots() }
+  }
+
+  // Новое выделение (ключ сменился) забывает последний поворот: угол — общий угол членов, иначе 0°.
+  private dropTurn() {
+    if (this.lastTurn && this.lastTurn.key !== this.key) this.lastTurn = null
+  }
+
+  // Правка по очереди: следующая берёт вид после предыдущей (удержанная стрелка в поле шлёт change чаще, чем
+  // отвечает Go). Сбой одной не рвёт цепочку.
+  queue<T>(fn: () => Promise<T>): Promise<T> {
+    const r = this.chain.then(fn)
+    this.chain = r.catch(() => undefined)
+    return r
+  }
+
+  // ---------- выделение ----------
+
+  select(refs: string[]) {
+    this.refs = refs
+    this.texts = []
+    this.stickers = []
+    this.sample = null
+    this.session = ''
+    this.dropTurn()
+  }
+
+  // Что выделено сейчас (одиночный текст — из edit; подпись в группу не входит).
+  private state(): GroupSel {
+    const t = edit.sel?.kind === 'text' && edit.sel.spread === store.spread?.id ? edit.sel.id : null
+    return { refs: this.refs, texts: this.texts, text: t, ...(this.stickers.length > 0 ? { stickers: this.stickers } : {}) }
+  }
+
+  // Применить выделение: одиночный текст — в edit, остальное — сюда. edit.select сбрасывает placesel,
+  // поэтому refs, texts и stickers ставятся после него.
+  private apply(g: GroupSel) {
+    const sid = store.spread?.id
+    if (g.text && sid) edit.select({ kind: 'text', spread: sid, id: g.text })
+    else if (edit.sel) edit.clear()
+    this.refs = g.refs
+    this.texts = g.texts
+    this.stickers = g.stickers ?? []
+    this.sample = null
+    this.session = ''
+    this.dropTurn()
+  }
+
+  // Щелчок по стикеру: он один выделенный; Shift/Ctrl — в группу и из неё (как у текста).
+  pickSticker(id: string, additive: boolean) {
+    if (additive) this.apply(toggleSticker(this.state(), id))
+    else this.apply({ refs: [], texts: [], text: null, stickers: [id] })
+    this.session = gridSession()
+  }
+
+  // Shift/Ctrl+щелчок по фото или месту — в группу и из неё (одиночный текст уходит в группу).
+  pick(ref: string, additive: boolean) {
+    if (additive) {
+      this.apply(toggleRef(this.state(), ref))
+      if (this.refs.includes(ref)) this.sample = ref
+    } else this.select([ref])
+    this.session = gridSession()
+  }
+
+  // Shift/Ctrl+щелчок по тексту.
+  pickText(id: string) {
+    this.apply(toggleText(this.state(), id))
+  }
+
+  // Ctrl+A на холсте: все фото, места и тексты текущего разворота.
+  selectAll() {
+    this.apply(selectAll(store.spread))
+  }
+
+  // Выделение рамкой (Marquee): найденное заменяет выделение или, с Shift/Ctrl, добавляется к нему.
+  pickHit(hit: Hit, additive: boolean) {
+    this.apply(marqueePick(this.state(), hit, additive))
+  }
+
+  // Группа: 2 и больше объекта (места, фото, тексты).
+  get isGroup() {
+    return this.selected.length + this.texts.length + this.selectedStickers.length > 1
+  }
+
+  // Выделен один стикер и больше ничего: карточка «Стикер», своя рамка с ручками.
+  get soloSticker(): StickerView | null {
+    const only = this.selectedStickers.length === 1 && this.selected.length === 0 && this.texts.length === 0 && !edit.sel
+    return only ? this.selectedStickers[0] : null
+  }
+
+  // Сколько объектов выделено (фото, места, тексты, стикеры; группа — от 2).
+  get count() {
+    return this.refs.length + this.texts.length + this.stickers.length + (edit.sel?.kind === 'text' ? 1 : 0)
+  }
+
+  clear() {
+    this.refs = []
+    this.texts = []
+    this.stickers = []
+    this.sample = null
+    this.live = null
+    this.liveStickers = null
+    this.liveTexts = null
+    this.liveTurn = null
+    this.lastTurn = null
+    this.guides = { x: null, y: null }
+    this.session = ''
+  }
+
+  // После правки: фото, которых больше нет в альбоме, и места, которых нет на развороте, выпадают;
+  // так же тексты.
+  prune() {
+    const places = store.spread?.places
+    const left = this.refs.filter((r) => store.used.has(r) || !!places?.some((p) => p.id === r))
+    if (left.length !== this.refs.length) this.refs = left
+    const texts = pruneTexts(this.texts, store.spread)
+    const stickers = pruneStickers(this.stickers, store.spread)
+    if (texts === this.texts && stickers === this.stickers) return
+    // Из группы из двух выпал один: оставшийся одиночный текст живёт в edit.sel, а не в texts.
+    this.apply(pruneSel(this.state(), store.spread))
+  }
+
+  // ---------- правки ----------
+
+  // Стрелки (только на сетке): серия — один шаг undo (merge = сессия). Очередь, чтобы удержанная
+  // клавиша не считала от устаревшего вида: каждый шаг берёт рамки из актуального store.view.
+  // Группа (2+ объекта, в том числе с текстами) едет через TransformGroup, одно место — через SetPlaces.
+  nudge(key: string, shift: boolean) {
+    const sid = store.spread?.id
+    // Стикеры без мест и текстов двигаются стрелками и на «Авто»: раскладку они не закрепляют (сц. 12).
+    const onlyStickers = this.refs.length === 0 && this.texts.length === 0 && this.stickers.length > 0
+    if (!sid || (!store.spread?.grid && !onlyStickers) || (this.refs.length === 0 && this.texts.length === 0 && !onlyStickers)) return
+    if (!this.session) this.session = gridSession()
+    const merge = this.session
+    const refs = [...this.refs]
+    const texts = [...this.texts]
+    const stickers = [...this.stickers]
+    this.chain = this.chain.then(async () => {
+      const s = sheetIn(store.view, sid)
+      const cur = refsBoxes(s, refs)
+      if (!s || (!s.grid && !onlyStickers)) return
+      const sts = pruneStickers(stickers, s)
+      if (cur.length + texts.length + sts.length > 1) {
+        const { dx, dy } = arrowDelta(key, shift)
+        const ids = [...cur.map((b) => b.id), ...pruneTexts(texts, s), ...sts]
+        await gridAct.placeEdit(sid, Api.TransformGroup(sid, ids, 1, 0, 0, dx, dy, merge))
+        return
+      }
+      if (cur.length === 0 && sts.length === 1) {
+        const st = s.stickers?.find((x) => x.id === sts[0])
+        if (!st) return
+        const b = nudgeBox(stickerBox(st), key, shift, s.w, s.h)
+        await store.run(Api.SetStickerBox(sid, st.id, b.x, b.y, b.w, b.h, b.rot, merge))
+        return
+      }
+      if (cur.length === 0) return
+      // Повёрнутое место зажимает Go (вылет не растёт): прижимать его к неповёрнутым границам нельзя — прыгнет.
+      const { dx, dy } = arrowDelta(key, shift)
+      const moved = cur[0].rot
+        ? [{ x: cur[0].x + dx, y: cur[0].y + dy, w: cur[0].w, h: cur[0].h }]
+        : nudge(cur, key, shift, { w: s.w, h: s.h })
+      await gridAct.placeEdit(
+        sid,
+        Api.SetPlaces(
+          sid,
+          moved.map((b, i) => ({ id: cur[i].id, x: b.x, y: b.y, w: b.w, h: b.h })),
+          merge,
+        ),
+      )
+    })
+  }
+
+  // Delete / «Удалить»: тексты группы и фото уходят разом, одним шагом undo (Api.DeleteSelection);
+  // фото — в ленту (у «Авто» раскладка перестроится, у сетки место остаётся пустым и выделенным);
+  // пустое место — убирается (второй Delete по месту).
+  async deleteSelected() {
+    const s = store.spread
+    // Go принимает в texts ID текстов и стикеров (одна правка, один шаг отмены).
+    const texts = [...this.texts, ...this.selectedStickers.map((t) => t.id)]
+    const items = refsBoxes(s, this.refs)
+    const photos = new SvelteSet(items.map((i) => i.photo).filter(Boolean))
+    // Выделенное из ленты альбома может ещё не быть на этом развороте.
+    for (const r of this.refs) if (store.used.has(r)) photos.add(r)
+    const empties = items.filter((i) => !i.photo).map((i) => i.id)
+    // Есть фото — пустые места остаются выделенными (второй Delete их уберёт).
+    const places = photos.size > 0 ? [] : empties
+    if (texts.length === 0 && photos.size === 0 && places.length === 0) return
+    const freed = photos.size > 0 && s?.grid ? items.filter((i) => i.photo).map((i) => i.id) : []
+    const sid = s?.id ?? ''
+    if (!(await gridAct.placeEdit(sid, Api.DeleteSelection(sid, [...photos], places, texts), false))) return
+    // Удалённые тексты и места выпадают из выделения сами (apply → prune).
+    if (photos.size > 0) this.select([...freed, ...empties])
+  }
+
+  // «+ Место»: на страницу под курсором (последнюю наведённую), новое место выделяется.
+  // У «Авто» первая такая правка закрепляет разворот (gridAct.placeEdit скажет об этом).
+  // Форма (044, 076): rect — прямоугольное, round — скруглённое (процент ставит Go), oval — круглое
+  // (квадрат 1/3 страницы формой круга).
+  async addPlace(shape: ShapeKey = 'rect') {
+    const s = store.spread
+    if (!s) return
+    const before = new Set((s.places ?? []).map((p) => p.id))
+    if (!(await gridAct.placeEdit(s.id, Api.AddPlace(s.id, this.page, shapeArg(shape))))) return
+    // У «Авто» до правки мест не было: новое — пустое место, а не закреплённые ячейки.
+    const added = store.spread?.places?.find((p) => !before.has(p.id) && !p.photo)
+    if (added) this.pick(added.id, false)
+  }
+
+  // ArrangePlaces: same | sameW | sameH | fitPhoto | splitH | splitV | front | back; образец «same» — последнее щёлкнутое, иначе первое выделенное.
+  async arrange(op: string) {
+    const s = store.spread
+    if (!s || this.selected.length === 0) return
+    await gridAct.placeEdit(s.id, Api.ArrangePlaces(s.id, op, this.ordered(op)))
+  }
+
+  // Id выделенного для ArrangePlaces; у «Одинакового размера» образец (Go берёт первый id) — последнее щёлкнутое.
+  private ordered(op: string): string[] {
+    const ids = this.selected.map((i) => i.id)
+    if (op !== 'same' && op !== 'sameW' && op !== 'sameH') return ids
+    return sampleFirst(ids, this.sample ? refsBoxes(store.spread, [this.sample])[0]?.id : null)
+  }
+
+  // Зеркало ↔ (axis 'h') / ↕ ('v') у выделенных фото: Go сам решает «всем или никому»; раскладку
+  // не трогает, поэтому store.run, а не placeEdit (закрепления нет).
+  async flip(axis: 'h' | 'v') {
+    const solo = this.soloSticker
+    const sid = store.spread?.id
+    if (solo && sid) {
+      await store.run(Api.FlipSticker(sid, solo.id, axis)) // стикер (048): Зеркало меню и клавиш
+      return
+    }
+    const photos = this.selected.map((i) => i.photo).filter(Boolean)
+    if (photos.length === 0) return
+    await store.run(Api.SetFlip(photos, axis))
+  }
+
+  // «Сделать ч/б / цветным» (068) у выделенных фото: «всем или никому» решает Go (SetGray); раскладку не трогает.
+  async gray() {
+    const photos = this.selected.map((i) => i.photo).filter(Boolean)
+    if (photos.length === 0) return
+    await store.run(Api.SetGray(photos))
+  }
+
+  // ↻ 90° (quarters 1) / ↺ (−1) у выделенных фото: поворот кадра, место стоит; «Авто» Go пересобирает сам.
+  // Раскладку не закрепляет, поэтому store.run, а не placeEdit.
+  async turn(quarters: -1 | 1 | 2) {
+    const photos = this.selected.map((i) => i.photo).filter(Boolean)
+    if (photos.length === 0) return
+    await store.run(Api.TurnPhotos(photos, quarters))
+  }
+
+  // Цели слоя, выравнивания и линеек: выделенные места и фото, тексты группы и одиночный текст
+  // (подпись не объект — она при фото). Одна производная на всех.
+  targetIds = $derived.by(() => {
+    const sid = store.spread?.id
+    const t = edit.sel
+    return layerTargets(
+      this.selected.map((i) => i.id),
+      [...this.texts, ...this.selectedStickers.map((t) => t.id)],
+      sid && t?.kind === 'text' && t.spread === sid ? t.id : null,
+    )
+  })
+  // Слои: у «Ручной» — любые цели; у «Авто» места стоят вплотную (их порядок Go не хранит), а стикер лежит
+  // поверх — с ним (и с текстом группы) слои двигать можно, если среди целей нет фото места (048, сц. 14–15).
+  // Уровень проверяют вызывающие (prefs.can('layers')).
+  canLayer = $derived(
+    this.targetIds.length > 0 && (!!store.spread?.grid || (this.selected.length === 0 && this.selectedStickers.length > 0)),
+  )
+
+  // Порядок слоёв выделенного (front | up | down | back): места, фото и тексты — один стек Go.
+  async layer(op: LayerOp) {
+    const s = store.spread
+    if (!s || !this.canLayer) return
+    // Цель и разворот фиксируем до ожидания: за него выделение или разворот могут смениться.
+    const ids = [...this.targetIds]
+    if (ids.length === 0) return
+    // Набранный текст уходит раньше (idle досылает его сразу), иначе порядок применится к старому состоянию.
+    await edit.idle()
+    await store.run(Api.ArrangeLayers(s.id, op, ids))
+  }
+
+  // «Целиком / С обрезкой» в карточке: подсвечено, только если так у всех выделенных.
+  allContain = $derived(this.selected.length > 0 && this.selected.every((p) => p.fit === 'contain'))
+  allCover = $derived(this.selected.length > 0 && this.selected.every((p) => p.fit !== 'contain'))
+  // Все выделенные фото ч/б (068): подпись «Сделать ч/б / цветным» в «Правке».
+  allGray = $derived(photosGray(store.spread, this.selected.map((b) => b.photo).filter(Boolean)))
+  async setFit(contain: boolean) {
+    const s = store.spread
+    if (!s || this.selected.length === 0 || (contain ? this.allContain : this.allCover)) return
+    await gridAct.placeEdit(
+      s.id,
+      Api.SetPlaceFit(
+        s.id,
+        this.selected.map((i) => i.id),
+        contain ? 'contain' : '',
+      ),
+    )
+  }
+
+  // Форма в карточке и в меню (044, 076): ▭ ▢ ◯, подсвечено, только если так у всех выделенных.
+  // У «Авто» все прямоугольные; ▢ и ◯ закрепляют разворот (gridAct.placeEdit), ▭ там холостая.
+  private allShape(k: ShapeKey): boolean {
+    return this.selected.length > 0 && this.selected.every((p) => shapeKey(p) === k)
+  }
+  allRect = $derived(this.allShape('rect'))
+  allRounded = $derived(this.allShape('round'))
+  allOval = $derived(this.allShape('oval'))
+  async setShape(k: ShapeKey) {
+    const s = store.spread
+    if (!s || this.selected.length === 0 || this.allShape(k)) return
+    await gridAct.placeEdit(
+      s.id,
+      Api.SetPlaceShape(
+        s.id,
+        this.selected.map((i) => i.id),
+        shapeArg(k),
+      ),
+    )
+  }
+
+  // «Скругление, %» — только у прямоугольных; у круга строки нет. Значение в поле: общее, иначе первого.
+  hasRound = $derived(this.selected.some((p) => p.shape !== 'oval'))
+  round = $derived(this.selected.find((p) => p.shape !== 'oval')?.round ?? 0)
+  // Предпросмотр ползунка: скругление (%) на ходу; null — нет жеста. Рисуют Cell и PlaceLayer через liveRadius.
+  liveRound = $state<number | null>(null)
+  // Радиус (мм) выделенного места по ID места или фото: на ходу — от ползунка, иначе пришедший из Go.
+  liveRadius(ids: (string | undefined)[], radius: number, w: number, h: number): number {
+    if (this.liveRound === null || !this.selected.some((b) => ids.includes(b.id) || ids.includes(b.photo))) return radius
+    return radiusOfRound(this.liveRound, w, h)
+  }
+  // Один вызов на отпускании ползунка / Enter; предпросмотр на ходу — в самой строке, в проект не уходит.
+  async setRound(round: number) {
+    const s = store.spread
+    if (!s || !this.hasRound || !Number.isFinite(round)) return
+    await gridAct.placeEdit(
+      s.id,
+      Api.SetPlaceRound(
+        s.id,
+        this.selected.map((i) => i.id),
+        round,
+      ),
+    )
+  }
+}
+
+export const placesel = new PlaceSel()

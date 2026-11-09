@@ -1,0 +1,38 @@
+version: 2
+# Раз в месяц и одним PR на экосистему (владелец 23.10): россыпь еженедельных PR висела неделями —
+# main обновляется только выпуском версии, обновления вносятся в dev целиком.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+    ignore:
+      # Vite закреплён на 7: vite-plugin-svelte 6 не поддерживает Vite 8 (см. README)
+      - dependency-name: vite
+        update-types: ["version-update:semver-major"]
+      # vite-plugin-svelte 7 требует Vite 8, а Vite закреплён на 7
+      - dependency-name: "@sveltejs/vite-plugin-svelte"
+        update-types: ["version-update:semver-major"]
+      # TypeScript 7 (новый компилятор) пока не поддерживают svelte-check и typescript-eslint, CI падает
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]

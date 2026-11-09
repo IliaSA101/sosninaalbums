@@ -1,0 +1,57 @@
+// Живой просмотр прозрачности (спека 017): пока тянут ползунок, фон на холсте, в ленте и на
+// мини-разворотах рисуется по этому значению, а не по View. Go спрашивается на отпускании.
+// scope — область фона; у стикеров (048) на его месте ID стикера: логика та же, просмотр по ключу.
+interface Live {
+  spread: string
+  scope: string
+  fade: number
+}
+
+export class FadeLive {
+  cur = $state<Live | null>(null)
+  // Очередь коммитов: удержанная стрелка шлёт много change, порядок ответов Go иначе не гарантирован.
+  private chain: Promise<unknown> = Promise.resolve()
+  private pending = 0
+
+  set(spread: string, scope: string, fade: number) {
+    this.cur = { spread, scope, fade }
+  }
+
+  clear() {
+    this.cur = null
+  }
+
+  // Просмотр снимается, только когда нет коммитов в пути: иначе фон мигнёт старым значением.
+  release() {
+    if (this.pending === 0) this.cur = null
+  }
+
+  // Коммит в очередь; просмотр снимается после последнего.
+  commit(run: () => Promise<unknown>): Promise<unknown> {
+    this.pending++
+    const p = this.chain.then(run, run)
+    this.chain = p.catch(() => {})
+    return this.chain.finally(() => {
+      this.pending--
+      this.release()
+    })
+  }
+
+  // Прозрачность области: просмотр, если он про неё, иначе значение из View.
+  of(spread: string, scope: string, fade: number): number {
+    const c = this.cur
+    return c && c.spread === spread && c.scope === scope ? c.fade : fade
+  }
+}
+
+export const fadeLive = new FadeLive()
+
+// Те же живые значения у узора (048): прозрачность и масштаб — отдельные экземпляры, чтобы не путаться
+// с фото фона той же области (оно лежит над узором). «fade» здесь — просто число параметра.
+// Прозрачность фона альбома (098): одна на весь альбом — ключ один, живой просмотр виден на всех листах сразу.
+export const ALBUM_FADE = 'album'
+export const albumFadeLive = new FadeLive()
+export const albumFade = (fade: number): number => albumFadeLive.of(ALBUM_FADE, ALBUM_FADE, fade)
+
+export const patFadeLive = new FadeLive()
+export const patScaleLive = new FadeLive()
