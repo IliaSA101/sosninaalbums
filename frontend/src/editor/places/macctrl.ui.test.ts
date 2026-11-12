@@ -16,8 +16,8 @@ vi.stubGlobal('document', {
   addEventListener: (t: string) => listeners.add.push(`document:${t}`),
   removeEventListener: () => {},
 })
-// Полный набор слушателей жеста: перенос, бросок, отмена (092 U1: pointercancel, blur, скрытие), Esc, колесо (095).
-const GESTURE = ['pointermove', 'pointerup', 'pointercancel', 'blur', 'keydown', 'wheel', 'document:visibilitychange']
+// Полный набор слушателей жеста: перенос, бросок, отмена (092 U1: pointercancel, blur, скрытие), Esc, Ctrl/⌘ (168), колесо (095).
+const GESTURE = ['pointermove', 'pointerup', 'pointercancel', 'blur', 'keydown', 'keyup', 'wheel', 'document:visibilitychange']
 
 const { setMacForTest } = await import('../../base/core/platform')
 const { drag } = await import('../../base/drag/drag.svelte')

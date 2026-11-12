@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
-import { releaseCsp } from './src/shell/boot/csp'
+import { releaseCsp } from './src/shell/boot/csp.ts'
 
 // Удаляет в outDir файлы, которых нет в новой сборке (прежние хэшированные бандлы) и которые старше её начала.
 function pruneOld(dir: string, root: string, keep: Set<string>, since: number) {
@@ -61,4 +61,6 @@ export default defineConfig(({ mode }) => ({
   // а предупреждение роняет check.ps1. Поднято с 0.10 (503 КБ после 034), 1500 — с 0.21 (1004 КБ после 081),
   // 2000 — с 0.34 (1517 КБ после 150/151). emptyOutDir: false — см. keepDist.
   build: { chunkSizeWarningLimit: 2000, emptyOutDir: false },
+  // svelte-check --tsgo пишет .svelte-check/tsconfig.json: без исключения Vite шлёт full-reload и окно wails dev перезагружается.
+  server: { watch: { ignored: ['**/.svelte-check/**'] } },
 }))

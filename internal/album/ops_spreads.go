@@ -28,6 +28,13 @@ func (e *Editor) AddPhotos(spreadID string, photos []model.PhotoInfo, index int)
 	return e.try("", func(p *model.Project) error { return spreads.AddPhotos(p, spreadID, photos, index) })
 }
 
+// ReplacePhoto — замена фото target на листе «Авто» фото ph, раскладка и ячейки те же (168), один
+// шаг отмены; named — автоимена (060), как у PlacePhotos.
+// Договор: до правки ничего; холостые случаи (ручной лист, обложка, неизвестные лист или фото) — внутри операции.
+func (e *Editor) ReplacePhoto(spreadID, target string, ph model.PhotoInfo) (v model.View, left int, named []string, err error) {
+	return e.namedTry([]model.PhotoInfo{ph}, func(p *model.Project) (int, error) { return spreads.ReplacePhoto(p, spreadID, target, ph) })
+}
+
 // DropPhotos — бросок фото на ручной разворот (042): placeID "" — на лист, иначе на место; at —
 // доля ширины листа под курсором (< 0 — точки нет; NaN/Inf — как −1); rest "" — спросить,
 // spreads.RestAdd / RestSkip — ответ. Ask — правки не было (rev и шаг отмены те же). Всё

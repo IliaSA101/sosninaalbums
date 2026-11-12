@@ -467,3 +467,22 @@ func replayFitFaces(r *replay) {
 	_, _, ok = e.FaceWindow(sid, "нет-такого")
 	r.read("FaceWindow:чужое", ok)
 }
+
+// replayReplace — замена фото на «Авто»-развороте (168): свежий лист из трёх фото и второй из двух, замена фото из
+// ленты (прежнее уходит в ленту), обмен с фото другого листа, холостая (нет такого фото), отмена.
+// Идёт последней: прежние строки эталона не сдвигаются.
+func replayReplace(r *replay) {
+	e := r.e
+	var feed []model.PhotoInfo
+	for i, k := range []byte("hvh") {
+		feed = append(feed, replayPhoto(70+i, k, model.XmpMarks{}))
+	}
+	r.ve("NewSpread:замена")(e.NewSpread(-1, feed))
+	s := r.v.Spreads[len(r.v.Spreads)-1].ID
+	other := []model.PhotoInfo{replayPhoto(75, 's', model.XmpMarks{}), replayPhoto(76, 'h', model.XmpMarks{})}
+	r.ve("NewSpread:замена, второй")(e.NewSpread(-1, other))
+	r.vnne("ReplacePhoto")(e.ReplacePhoto(s, feed[1].ID, replayPhoto(73, 'v', model.XmpMarks{})))
+	r.vnne("ReplacePhoto:из альбома")(e.ReplacePhoto(s, feed[0].ID, other[0]))
+	r.vnne("ReplacePhoto:холостая")(e.ReplacePhoto(s, "нет", replayPhoto(74, 'h', model.XmpMarks{})))
+	r.do("Undo:замена", e.Undo())
+}

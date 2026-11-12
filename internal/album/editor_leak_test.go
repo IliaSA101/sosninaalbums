@@ -51,6 +51,7 @@ var leakFresh = map[string]string{
 	"AddStickersIf":     "ID новых стикеров, новый срез",
 	"FillPlaces":        "names — новые имена из переданных photos",
 	"PlacePhotos":       "names — новые имена из переданных photos",
+	"ReplacePhoto":      "names — новые имена из переданного фото (168)",
 	"CreateCoverLook":   "*LookRef — копия записи макета после правки",
 	"CreateCoverLookIf": "*LookRef — копия записи макета после правки",
 	"VignetteChoices":   "новые выборы раскладок над копией заголовка листа",

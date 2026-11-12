@@ -29,6 +29,7 @@ vi.mock('./dropact', () => ({ dropOn }))
 
 const { drag } = await import('./drag.svelte')
 const { edges, edgeScroll } = await import('./edgescroll')
+const { setOsForTest } = await import('../core/platform')
 
 const down = { button: 0, ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, clientX: 10, clientY: 10 } as never
 const moved = (dx: number) => ({ clientX: 10 + dx, clientY: 10 })
@@ -36,8 +37,10 @@ const ls2 = {
   get move() {
     return ls.win.get('pointermove') ?? null
   },
+  // pointerup приходит с событием (Ctrl/⌘ читается из него, 168); тесты без модификаторов зовут без аргументов.
   get up() {
-    return ls.win.get('pointerup') ?? null
+    const f = ls.win.get('pointerup')
+    return f ? (e: unknown = {}) => f(e) : null
   },
 }
 
@@ -290,5 +293,92 @@ describe('сессия переноса (096)', () => {
     expect(drag.target).toEqual({ kind: 'spread', spread: 's2', at: 0.3 })
     expect(drag.over).toBe('spread:s2')
     drag.cancel()
+  })
+})
+
+// 168: Ctrl (⌘) во время переноса фото из ленты на фото «Авто» — цель «центр» (замена); мышь при этом может стоять.
+describe('Ctrl — заменить фото (168)', () => {
+  const cell = {
+    dataset: { drop: 'cell', spread: 's2', index: '1', photo: 'x' },
+    closest: (sel: string) => (sel === '[data-chrome]' ? null : cell),
+    getBoundingClientRect: () => ({ left: 20, top: 0, width: 100, height: 100 }),
+  }
+  const strip =
+    (...ids: string[]) =>
+    () => ({ kind: 'photos' as const, ids })
+  const mv = (mods = {}) => ({ ...moved(20), buttons: 1, ctrlKey: false, metaKey: false, ...mods })
+  const key = (type: 'keydown' | 'keyup', key: string, mods = {}) => ls.win.get(type)!({ key, ctrlKey: false, metaKey: false, ...mods })
+  const left = { kind: 'cell', spread: 's2', index: 1, photo: 'x', side: 'before' } // fx = 0,1 — край, из ленты — «до»
+
+  beforeEach(() => {
+    ev.stack = [cell]
+    setOsForTest('windows')
+  })
+
+  it('без клавиши край — вставка «до», с Ctrl — центр', () => {
+    drag.start(down, strip('a'))
+    ls2.move!(mv())
+    expect(drag.target).toEqual(left)
+    expect(drag.keep).toBe(false)
+    ls2.move!(mv({ ctrlKey: true }))
+    expect(drag.target).toEqual({ ...left, side: 'center' })
+    expect(drag.over).toBe('cell:x:center')
+    drag.cancel()
+    expect(drag.keep).toBe(false)
+  })
+
+  it('Ctrl нажат и отпущен при неподвижной мыши — цель пересчитывается', () => {
+    drag.start(down, strip('a'))
+    ls2.move!(mv())
+    key('keydown', 'Control', { ctrlKey: true })
+    expect(drag.keep).toBe(true)
+    expect(drag.target).toEqual({ ...left, side: 'center' })
+    key('keyup', 'Control')
+    expect(drag.keep).toBe(false)
+    expect(drag.target).toEqual(left)
+    drag.cancel()
+  })
+
+  it('другая клавиша цель не трогает', () => {
+    drag.start(down, strip('a'))
+    ls2.move!(mv())
+    key('keydown', 'Shift')
+    expect(drag.target).toEqual(left)
+    drag.cancel()
+  })
+
+  it('pointerup с ctrlKey бросает замену', () => {
+    drag.start(down, strip('a'))
+    ls2.move!(mv())
+    ls2.up!({ ctrlKey: true, metaKey: false })
+    expect(dropOn).toHaveBeenCalledWith({ kind: 'photos', ids: ['a'] }, { ...left, side: 'center' })
+  })
+
+  it('несколько фото с Ctrl — цель many, без подсветки', () => {
+    drag.start(down, strip('a', 'b'))
+    ls2.move!(mv({ ctrlKey: true }))
+    expect(drag.target).toEqual({ ...left, side: 'center', many: true })
+    expect(drag.over).toBe('')
+    drag.cancel()
+  })
+
+  it('фото из альбома: Ctrl зоны не меняет', () => {
+    drag.start(down, () => ({ kind: 'photos', ids: ['a'], fromSpread: 's1' }))
+    ls2.move!(mv({ ctrlKey: true }))
+    expect(drag.target).toEqual(left)
+    drag.cancel()
+  })
+
+  it('Mac: работает ⌘, Ctrl — нет', () => {
+    setOsForTest('mac')
+    drag.start(down, strip('a'))
+    ls2.move!(mv({ ctrlKey: true }))
+    expect(drag.target).toEqual(left)
+    ls2.move!(mv({ metaKey: true }))
+    expect(drag.target).toEqual({ ...left, side: 'center' })
+    key('keyup', 'Meta')
+    expect(drag.target).toEqual(left)
+    drag.cancel()
+    setOsForTest(null)
   })
 })

@@ -35,7 +35,9 @@ function onHidden() {
 }
 if (typeof window !== 'undefined') {
   const opt = { capture: true, passive: true }
-  const types = ['pointermove', 'pointerover', 'pointerdown']
+  // pointerover не слушаем: браузер шлёт его сам при смене вёрстки (панель стала pointer-events: none), и в
+  // Linux-Chromium с недостоверными модификаторами — признак гас. Настоящий вход курсора даёт pointermove (158 R4).
+  const types = ['pointermove', 'pointerdown']
   for (const t of types) window.addEventListener(t, onPointer, opt)
   window.addEventListener('keyup', onKeyup, opt)
   window.addEventListener('blur', forget, opt)

@@ -59,7 +59,7 @@ test("gclWant: в ci.yml проекта версия задана", () => {
 test("gclHave: разбор вывода golangci-lint version", () => {
   assert.equal(
     gclHave(
-      "golangci-lint has version 2.14.0 built with go1.26.10 from (unknown)",
+      "golangci-lint has version 2.14.0 built with go1.26.11 from (unknown)",
     ),
     "v2.14.0",
   );

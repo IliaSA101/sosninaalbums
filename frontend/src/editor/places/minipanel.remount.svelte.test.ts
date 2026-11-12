@@ -139,6 +139,22 @@ describe('MiniPanel: пересоздание при зажатом Shift', () =
     unmount(b)
   })
 
+  it('пересчёт наведения браузером (pointerover без модификаторов) не гасит насквозь при зажатом Shift', () => {
+    placesel.refs = ['p1']
+    const a = up()
+    flushSync()
+    window.dispatchEvent(new KeyboardEvent('keydown', { shiftKey: true, bubbles: true }))
+    ptr('pointermove', true)
+    flushSync()
+    expect(through()).toBe(true)
+    // Панель стала pointer-events: none — браузер сам шлёт pointerover, в Linux-Chromium без Shift (158 R4)
+    window.dispatchEvent(new PointerEvent('pointerover', { shiftKey: false, bubbles: true }))
+    document.querySelector('.minipanel')?.dispatchEvent(new PointerEvent('pointerover', { shiftKey: false, bubbles: true }))
+    flushSync()
+    expect(through()).toBe(true)
+    unmount(a)
+  })
+
   it('keyup с Shift (отпущена другая клавиша) без указателя признак не включает', () => {
     placesel.refs = ['p1']
     window.dispatchEvent(new Event('blur')) // указателя «не видели»

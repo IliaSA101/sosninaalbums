@@ -1,5 +1,6 @@
 // Что делать, когда payload брошен на цель: чистый план, исполняет его store.drop.
 import type { BackdropScope, Payload, Target } from '../core/types'
+import { isMac } from '../core/platform'
 import { COVER_ID } from '../geom/sheet'
 
 export type DropPlan =
@@ -10,6 +11,8 @@ export type DropPlan =
   // Своё единственное фото в щель своего разворота в ленте (114): Api.MovePhoto — «Авто» вставляет, ручной сдвигает фото по местам.
   | { op: 'move'; id: string; spread: string; at: number }
   | { op: 'swap'; a: string; b: string }
+  // Ctrl (⌘) + фото из ленты на фото «Авто» (168): Api.ReplacePhoto — раскладка не меняется, прежнее фото уходит в ленту.
+  | { op: 'replace'; spread: string; target: string; id: string }
   | { op: 'newSpread'; at: number; ids: string[]; strip: boolean }
   | { op: 'remove'; ids: string[] }
   // Фото на место сетки (Api.PlacePhotos): из ленты (fromSpread = false) или из альбома.
@@ -27,6 +30,9 @@ export const BACKDROP_ONE = 'На фон — только одно фото'
 // Обложка (127): отказ ведёт к ▦ над сторонкой — там несколько фото ложатся местами, а не фоном.
 export const COVER_BG_MANY = 'На фон — только одно фото. Для нескольких — ▦ над сторонкой'
 export const COVER_ONE = 'На обложку — только одно фото'
+// Ctrl (⌘) на несколько фото из ленты (168): заменить можно одним; клавиша названа по ОС.
+export const REPLACE_ONE = 'Заменить можно одним фото. Без Ctrl фото встанут рядом'
+export const replaceOne = (mac: boolean): string => (mac ? REPLACE_ONE.replace('Ctrl', '⌘') : REPLACE_ONE)
 
 // Зона фона принимает ровно одно фото; несколько — не подсвечиваем, но при броске объясняем.
 export const backdropAccepts = (p: Payload | null): boolean => p?.kind === 'photos' && p.ids.length === 1
@@ -49,12 +55,17 @@ function chipPlan(p: PhotoPayload, t: Extract<Target, { kind: 'chip' }>): DropPl
   return { op: 'add', spread: t.spread, ids: p.ids, at, fromSpread: !!p.fromSpread, go: false }
 }
 
-// Фото на ячейку: центр — обмен, иначе вставка рядом.
+// Фото на ячейку: центр — обмен (из альбома) или замена (из ленты, Ctrl), иначе вставка рядом.
 function cellPlan(p: PhotoPayload, t: Extract<Target, { kind: 'cell' }>): DropPlan | null {
   const ids = p.ids
   if (t.side === 'center') {
-    // Центр бывает только у фото из разворота (из ленты hit даёт «после») — обмен.
-    return ids.length === 1 && ids[0] !== t.photo ? { op: 'swap', a: ids[0], b: t.photo } : null
+    if (ids.length === 0 || (ids.length === 1 && ids[0] === t.photo)) return null
+    // Центр из ленты бывает только с Ctrl (168): одно фото заменяет, несколько — тост.
+    if (!p.fromSpread)
+      return ids.length === 1
+        ? { op: 'replace', spread: t.spread, target: t.photo, id: ids[0] }
+        : { op: 'reject', text: replaceOne(isMac()) }
+    return ids.length === 1 ? { op: 'swap', a: ids[0], b: t.photo } : null
   }
   return { op: 'add', spread: t.spread, ids, at: insertAt(t.side, t.index), fromSpread: !!p.fromSpread, go: false }
 }

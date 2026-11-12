@@ -48,6 +48,16 @@ describe('cellSide', () => {
     expect(cellSide(0.5, false)).toBe('after')
     expect(cellSide(0.1, false)).toBe('before')
   })
+  // 168: Ctrl (⌘) — фото из ленты целиком «центр» (замена); из альбома зоны прежние.
+  it('keep: из ленты весь диапазон — центр', () => {
+    expect([0, 0.1, 0.24, 0.5, 0.76, 1].map((x) => cellSide(x, false, true))).toEqual(Array(6).fill('center'))
+  })
+  it('keep: из альбома зоны прежние', () => {
+    expect([0.1, 0.5, 0.9].map((x) => cellSide(x, true, true))).toEqual(['before', 'center', 'after'])
+  })
+  it('без keep — как раньше', () => {
+    expect([0.1, 0.5, 0.9].map((x) => cellSide(x, false, false))).toEqual(['before', 'after', 'after'])
+  })
 })
 
 describe('halfSide', () => {

@@ -123,7 +123,8 @@ for (const pattern of [
 }
 
 export default ts.config(
-  { ignores: ['wailsjs/**', 'dist/**', 'node_modules/**'] },
+  // .svelte-check — временные файлы svelte-check --tsgo (спека 169)
+  { ignores: ['wailsjs/**', 'dist/**', 'node_modules/**', '.svelte-check/**'] },
   js.configs.recommended,
   ...ts.configs.recommended,
   ...svelte.configs['flat/recommended'],

@@ -258,7 +258,7 @@ func (a *App) PickNamesFile() (f NamesFile, err error) {
 // Режим «Сетка» (спека 007, design §4.2): правки мест под guardEdit.
 
 // GridResult — вид после правки и сколько фото не встало или ушло в ленту
-// (интерфейс показывает тост с «Вернуть» = Undo). Named — только у PlacePhotos и FillPlaces.
+// (интерфейс показывает тост с «Вернуть» = Undo). Named — только у PlacePhotos, ReplacePhoto и FillPlaces.
 type GridResult struct {
 	View  model.View `json:"view"`
 	Left  int        `json:"left"`
@@ -278,6 +278,21 @@ func (r GridResult) MarshalJSON() ([]byte, error) {
 func (a *App) PlacePhotos(spreadID, placeID string, ids []string) (r GridResult, err error) {
 	defer a.guardEdit("PlacePhotos", &r.View, &err)
 	v, left, named, err := a.editor().PlacePhotos(spreadID, placeID, a.infosOrRefs(ids))
+	r.View, err = a.changedOrErr(v, err)
+	r.Left, r.Named = left, named
+	return r, err
+}
+
+// ReplacePhoto — фото id из ленты (или альбома) на место фото target листа «Авто» (168):
+// раскладка и ячейки те же. Left = 1 — прежнее фото ушло в ленту. Фото пропало при
+// пересканировании — ErrNoPhoto, проект прежний (092).
+func (a *App) ReplacePhoto(spreadID, target, id string) (r GridResult, err error) {
+	defer a.guardEdit("ReplacePhoto", &r.View, &err)
+	infos, err := edit.PhotosFor("ReplacePhoto", []string{id}, a.infosOrRefs)
+	if err != nil {
+		return GridResult{View: a.editor().View()}, err
+	}
+	v, left, named, err := a.editor().ReplacePhoto(spreadID, target, infos[0])
 	r.View, err = a.changedOrErr(v, err)
 	r.Left, r.Named = left, named
 	return r, err

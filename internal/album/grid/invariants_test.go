@@ -49,6 +49,7 @@ func TestGridInvariants(t *testing.T) {
 	clips := 0                                      // удачных вставок и дублей (099)
 	coverGrids := 0                                 // удачных плиток и шагов раскладки сторонки обложки (127)
 	looks := 0                                      // удачных постановок макета альбома (131)
+	replaces := 0                                   // замен фото на листе (168)
 	shifts := 0                                     // сдвигов своего фото по местам ручного листа (114)
 	frSrcs := []model.BorderSrc{{}, {Kind: "line", Width: 2}, {Kind: "polaroid", Inks: []string{"#EEEEEE"}}, {Kind: "future-kind"},
 		{Photo: model.PhotoInfo{ID: model.LibPhotoID(frKey), Path: filepath.Join(dir, "frame.png"), Lib: frKey, W: 3000, H: 4000}, Cut: [4]float64{0.1, 0.2, 0.1, 0.3}},
@@ -94,6 +95,15 @@ func TestGridInvariants(t *testing.T) {
 			e.MovePhoto(before[step/5%len(before)], id, step/3%(len(before)+2)-1)
 			if _, now := edtest.P(e).Find(id); now != nil && !slices.Equal(before, now.Photos) {
 				shifts++
+			}
+		}
+		// 168: каждый 7-й шаг — замена фото на «Авто» (ручной лист, обложка и обмен с ручным местом тоже).
+		// Без r: прежняя последовательность не сдвигается.
+		if len(s.Photos) > 0 && step%7 == 3 {
+			rev := edtest.Rev(e)
+			e.ReplacePhoto(id, s.Photos[step/7%len(s.Photos)], pool[step/7%len(pool)])
+			if edtest.Rev(e) != rev {
+				replaces++
 			}
 		}
 		switch op {
@@ -337,6 +347,9 @@ func TestGridInvariants(t *testing.T) {
 	if shifts < need(10) {
 		t.Fatalf("сдвигов фото по местам почти не было: %d", shifts)
 	}
+	if replaces < need(10) {
+		t.Fatalf("замен фото на листе почти не было: %d", replaces)
+	}
 	if coverGrids < need(20) {
 		t.Fatalf("раскладок сторонки обложки почти не было: %d", coverGrids)
 	}
@@ -347,8 +360,8 @@ func TestGridInvariants(t *testing.T) {
 		t.Fatalf("сеток мало: %d разворотов-сеток по шагам, %d фото в местах, %d повёрнутых мест, %d с общим порядком",
 			withGrid, seated, turned, ordered)
 	}
-	t.Logf("макетов %d, раскладок сторонки %d, сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, сдвигов %d, разворотов %d",
-		looks, coverGrids, withGrid, seated, turned, ordered, vigs, bordered, clips, shifts, len(edtest.P(e).Spreads))
+	t.Logf("макетов %d, раскладок сторонки %d, сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, сдвигов %d, замен %d, разворотов %d",
+		looks, coverGrids, withGrid, seated, turned, ordered, vigs, bordered, clips, shifts, replaces, len(edtest.P(e).Spreads))
 }
 
 // coverGridOp — шаг раскладки сторонки обложки (127): плитка случайного ряда на вкладке 1…7 (со

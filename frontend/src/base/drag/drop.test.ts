@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BACKDROP_ONE, backdropAccepts, COVER_BG_MANY, dropPlan } from './drop'
+import { setOsForTest } from '../core/platform'
+import { BACKDROP_ONE, backdropAccepts, COVER_BG_MANY, dropPlan, REPLACE_ONE, replaceOne } from './drop'
 import type { Payload, Target } from '../core/types'
 
 const strip: Payload = { kind: 'photos', ids: ['a', 'b'] }
@@ -38,6 +39,22 @@ describe('dropPlan: фото', () => {
     expect(dropPlan(inSpread, c('x'))).toEqual({ op: 'swap', a: 'a', b: 'x' })
     expect(dropPlan(inSpread, c('a'))).toBeNull()
     expect(dropPlan({ kind: 'photos', ids: ['a', 'b'], fromSpread: 's1' }, c('x'))).toBeNull()
+  })
+  // 168: центр у фото из ленты бывает только с Ctrl (⌘) — замена; из альбома по-прежнему обмен.
+  it('ячейка: центр из ленты — replace для одного фото', () => {
+    const t: Target = { kind: 'cell', spread: 's2', index: 1, photo: 'x', side: 'center' }
+    expect(dropPlan({ kind: 'photos', ids: ['a'] }, t)).toEqual({ op: 'replace', spread: 's2', target: 'x', id: 'a' })
+    expect(dropPlan({ kind: 'photos', ids: ['x'] }, t)).toBeNull()
+    expect(dropPlan({ kind: 'photos', ids: [] }, t)).toBeNull()
+  })
+  it('ячейка: центр из ленты с несколькими фото — отказ с текстом (на Mac — ⌘)', () => {
+    const t: Target = { kind: 'cell', spread: 's2', index: 1, photo: 'x', side: 'center', many: true }
+    setOsForTest('windows')
+    expect(dropPlan(strip, t)).toEqual({ op: 'reject', text: REPLACE_ONE })
+    setOsForTest('mac')
+    expect(dropPlan(strip, t)).toEqual({ op: 'reject', text: 'Заменить можно одним фото. Без ⌘ фото встанут рядом' })
+    setOsForTest(null)
+    expect(replaceOne(false)).toBe(REPLACE_ONE)
   })
   it('chip: до — по индексу', () => {
     const t: Target = { kind: 'chip', spread: 's2', index: 2, photo: 'x', side: 'before' }

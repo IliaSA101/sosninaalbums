@@ -339,6 +339,8 @@ func replayScenario(t *testing.T) *replay {
 	replayIdent(r)
 	// 162 М4: правки «если всё ещё то же» — последними.
 	replayIf(r)
+	// 168: замена фото на «Авто» — последней.
+	replayReplace(r)
 	return r
 }
 

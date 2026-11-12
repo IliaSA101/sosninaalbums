@@ -1,6 +1,8 @@
 <script lang="ts">
   import { drag } from './drag.svelte'
-  import { HINT_TEXT, wheelHint } from './wheelhint.svelte'
+  import { ghostNote, replaceHint } from './ghostnote'
+  import { wheelHint } from './wheelhint.svelte'
+  import { isMac } from '../core/platform'
   import { store } from '../core/store.svelte'
   import { thumbUrl } from '../core/media'
   import Icon from '../ui/Icon.svelte'
@@ -8,6 +10,10 @@
   import { toastParts } from '../core/toasts.svelte'
 
   const ids = $derived(drag.payload?.kind === 'photos' ? drag.payload.ids : [])
+  // Строка под призраком: «Заменить фото», подсказка клавиши (168) или колеса (095).
+  const note = $derived(
+    ghostNote({ target: drag.target, payload: drag.payload, keep: drag.keep, mac: isMac(), used: replaceHint.used, wheel: wheelHint.show }),
+  )
 </script>
 
 <!-- «Призрак» под курсором при перетаскивании фото -->
@@ -22,7 +28,7 @@
         >{#if drag.over}<Icon name="plus" size={12} stroke={3} />{/if}{#if ids.length > 1}<span>{ids.length}</span>{/if}</span
       >
     {/if}
-    {#if wheelHint.show}<div class="hint">{HINT_TEXT}</div>{/if}
+    {#if note}<div class="hint">{note}</div>{/if}
   </div>
 {/if}
 

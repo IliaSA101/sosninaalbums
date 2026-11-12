@@ -8,6 +8,7 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
   MovePhoto: vi.fn(),
   NewSpread: vi.fn(),
   PlacePhotos: vi.fn(),
+  ReplacePhoto: vi.fn(),
   DropPhotos: vi.fn(),
   CreateCoverLook: vi.fn(),
   ForgetFileNames: vi.fn(),
@@ -17,6 +18,7 @@ vi.stubGlobal('window', globalThis)
 const Api = await import('../../../wailsjs/go/app/App')
 const { store } = await import('../core/store.svelte')
 const { dropOn, dropHooks } = await import('./dropact')
+const { replaceHint } = await import('./ghostnote')
 const { dropLanded } = await import('../prefs/cardgroups.svelte')
 const { noHooks } = await import('../core/hooks')
 
@@ -31,7 +33,7 @@ beforeEach(() => {
   gate.mockReset()
   gate.mockImplementation(async (ids: string[]) => ids)
   store.plug({ ...noHooks, gate })
-  for (const f of [Api.AddPhotos, Api.MovePhoto, Api.NewSpread, Api.PlacePhotos, Api.DropPhotos]) vi.mocked(f).mockReset()
+  for (const f of [Api.AddPhotos, Api.MovePhoto, Api.NewSpread, Api.PlacePhotos, Api.DropPhotos, Api.ReplacePhoto]) vi.mocked(f).mockReset()
   store.apply(view(1, ['a', 'b', 'c', 'd']))
   store.go(0)
 })
@@ -201,5 +203,74 @@ describe('dropOn: бросок фото на фон', () => {
     const n = dropLanded.n
     await dropOn(photo, zone)
     expect(dropLanded.n).toBe(n)
+  })
+})
+
+// 168: Ctrl (⌘) + фото из ленты на фото «Авто» — Api.ReplacePhoto через ворота копии; тост общий с PlacePhotos.
+describe('dropOn: замена фото на «Авто» (168)', () => {
+  const ReplacePhoto = vi.mocked(Api.ReplacePhoto)
+  const strip = { kind: 'photos', ids: ['f1'] } as never
+  const cell = { kind: 'cell', spread: 'a', index: 1, photo: 'p2', side: 'center' } as never
+  const done = (rev: number, left: number, named: string[] = []) => ({ view: view(rev, ['a', 'b', 'c', 'd']), left, named }) as never
+
+  beforeEach(() => {
+    store.toast = null
+    replaceHint.used = false
+  })
+
+  it('ворота получают ID, Go — то, что они вернули; тост «Прежнее фото вернулось в ленту» с «Вернуть»', async () => {
+    gate.mockResolvedValue(['f1-new'])
+    ReplacePhoto.mockResolvedValueOnce(done(2, 1))
+    store.selected.add('f1')
+    await dropOn(strip, cell)
+    expect(gate).toHaveBeenCalledExactlyOnceWith(['f1'])
+    expect(ReplacePhoto).toHaveBeenCalledExactlyOnceWith('a', 'p2', 'f1-new')
+    expect(Api.AddPhotos).not.toHaveBeenCalled()
+    expect(store.toast?.text).toBe('Прежнее фото вернулось в ленту')
+    expect(store.toast?.action?.label).toBe('Вернуть')
+    expect(store.selected.has('f1')).toBe(false)
+    expect(replaceHint.used).toBe(true)
+  })
+
+  it('«Отмена» в окне копии — Go не вызывается, выделение и подсказка на месте', async () => {
+    gate.mockResolvedValue(null)
+    store.selected.add('f1')
+    await dropOn(strip, cell)
+    expect(ReplacePhoto).not.toHaveBeenCalled()
+    expect(store.selected.has('f1')).toBe(true)
+    expect(replaceHint.used).toBe(false)
+    store.selected.clear()
+  })
+
+  it('left = 0 (обмен с другим листом «Авто»): без «вернулось в ленту»', async () => {
+    ReplacePhoto.mockResolvedValueOnce(done(2, 0))
+    await dropOn(strip, cell)
+    expect(store.toast?.text ?? '').not.toContain('вернулось')
+    expect(store.toast?.action).toBeUndefined()
+  })
+
+  it('холостая правка (тот же rev) — тоста нет, выделение не снято', async () => {
+    ReplacePhoto.mockResolvedValueOnce(done(1, 0))
+    store.selected.add('f1')
+    await dropOn(strip, cell)
+    expect(store.toast).toBeNull()
+    expect(store.selected.has('f1')).toBe(true)
+    expect(replaceHint.used).toBe(false)
+    store.selected.clear()
+  })
+
+  it('ошибка Go — тост об ошибке, подсказка не гасится', async () => {
+    ReplacePhoto.mockRejectedValueOnce(new Error('нельзя'))
+    await dropOn(strip, cell)
+    expect(store.toast?.kind).toBe('error')
+    expect(replaceHint.used).toBe(false)
+    store.toast = null
+  })
+
+  it('несколько фото — тост-отказ, Go не вызывается', async () => {
+    await dropOn({ kind: 'photos', ids: ['f1', 'f2'] } as never, { ...(cell as object), many: true } as never)
+    expect(ReplacePhoto).not.toHaveBeenCalled()
+    expect(store.toast?.text).toContain('Заменить можно одним фото')
+    store.toast = null
   })
 })

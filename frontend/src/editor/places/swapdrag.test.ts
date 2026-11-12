@@ -49,7 +49,7 @@ describe('Ctrl-обмен на ручном листе', () => {
     moveTo(20)
     expect(drag.active).toBe(true)
     expect(drag.payload).toEqual({ kind: 'photos', ids: ['a'], fromSpread: 's1' })
-    ls.win.get('pointerup')!()
+    ls.win.get('pointerup')!({ ctrlKey: false, metaKey: false })
     expect(drag.clickAllowed()).toBe(false) // щелчок после переноса не выделяет
   })
   it('Ctrl без сдвига (меньше 5 px) — не перенос, щелчок идёт в выделение', () => {
@@ -57,7 +57,7 @@ describe('Ctrl-обмен на ручном листе', () => {
     expect(press(down({ ctrlKey: true }))).toBe('drag')
     moveTo(4)
     expect(drag.active).toBe(false)
-    ls.win.get('pointerup')!()
+    ls.win.get('pointerup')!({ ctrlKey: false, metaKey: false })
     expect(drag.clickAllowed()).toBe(true)
   })
   it('без Ctrl — двигается место, drag не стартует', () => {

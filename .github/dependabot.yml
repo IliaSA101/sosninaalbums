@@ -27,12 +27,13 @@ updates:
       all:
         patterns: ["*"]
     ignore:
-      # Vite закреплён на 7: vite-plugin-svelte 6 не поддерживает Vite 8 (см. README)
-      - dependency-name: vite
-        update-types: ["version-update:semver-major"]
-      # vite-plugin-svelte 7 требует Vite 8, а Vite закреплён на 7
-      - dependency-name: "@sveltejs/vite-plugin-svelte"
-        update-types: ["version-update:semver-major"]
-      # TypeScript 7 (новый компилятор) пока не поддерживают svelte-check и typescript-eslint, CI падает
+      # TypeScript держим на 6.0.x: peer typescript-eslint — <6.1.0, а TS 7 (новый компилятор) не имеет JS API
+      # для typescript-eslint и svelte2tsx; нативный tsgo ставится отдельно (@typescript/native, спека 169)
       - dependency-name: typescript
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Псевдоним npm:typescript@7 для svelte-check --tsgo: поддержка псевдонимов Dependabot не подтверждена,
+      # поднимаем руками вместе с svelte-check (169-4)
+      - dependency-name: "@typescript/native"
+      # Типы Node идут за Node 24 в CI, а не за последним мажором
+      - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]

@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { FMA_GOFLAGS, NOTICE_MUST, changelogSection, checkAll, checkFmaFlags, checkInstaller, checkLicense, checkNeeds, checkReadmeFeatures, checkReadmeMedia, parseJobs, workflowExec } from './release-check.mjs'
+import { FMA_GOFLAGS, NOTICE_MUST, changelogSection, checkAll, checkFmaFlags, checkFrontFlags, FRONT_FILES, checkInstaller, checkLicense, checkNeeds, checkReadmeFeatures, checkReadmeMedia, parseJobs, workflowExec } from './release-check.mjs'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -56,7 +56,24 @@ jobs:
       GOFLAGS: ${FMA_GOFLAGS}
     steps:
       - run: go test -short ./internal/...
+  check:
+    runs-on: windows-2025
+    steps:
+      - name: prettier
+        run: npx prettier --experimental-cli --check .
+      - name: eslint
+        run: npx eslint . --max-warnings 0 --concurrency=auto
+      - name: svelte-check
+        run: npx svelte-check --fail-on-warnings --tsgo
 `
+
+// Места вызова проверок фронта (169) в макете: check.sh/.ps1, precheck.mjs, scripts package.json.
+const FRONT = {
+  'scripts/check.sh': "  step 'prettier' --dir \"$fe\" npx prettier --experimental-cli --check . --cache\n  step 'eslint' --dir \"$fe\" npx eslint . --max-warnings 0 --concurrency=auto\n  step 'svelte-check' --dir \"$fe\" npx svelte-check --output human --fail-on-warnings --tsgo\n",
+  'scripts/check.ps1': "Step 'prettier' { npx prettier --experimental-cli --check . } $fe\nStep 'eslint' { npx eslint . --max-warnings 0 --concurrency=auto } $fe\nStep 'svelte-check' { npx svelte-check --output human --fail-on-warnings --tsgo } $fe\n",
+  'scripts/precheck.mjs': '// prettier, eslint, svelte-check\nconst a = [["prettier", "--experimental-cli", "--check"], ["eslint", "--max-warnings", "0", "--concurrency=auto"]]\nconst b = [["svelte-check", "--output", "human", "--tsgo"]]\n',
+  'frontend/package.json': JSON.stringify({ scripts: { check: 'svelte-check --tsgo', lint: 'eslint . --concurrency=auto', format: 'prettier --write . --experimental-cli', 'format:check': 'prettier --check . --experimental-cli' } }),
+}
 
 const ID_A = 'aaaaaaaa-1111-2222-3333-444444444444'
 const ID_B = 'bbbbbbbb-1111-2222-3333-444444444444'
@@ -75,6 +92,7 @@ const FILES = {
   'CHANGELOG.md': '# История\n\n## 1.2.0 — 2026-01-01\n\n### Добавлено\n\n- Новое (051)\n- Ещё (052)\n\n## 1.1.0 — 2025-12-01\n\n- Старое\n',
   '.github/workflows/release.yml': YML,
   '.github/workflows/ci.yml': CI_YML,
+  ...FRONT,
   '.github/release-notes.md': 'Скачайте `SosninaAlbums-{{VERSION}}-windows-x64-setup.exe`. Без установки: `SosninaAlbums-{{VERSION}}.exe` в zip.\n',
   'docs/install/guide.md': 'В папке `SosninaAlbums-<версия>.exe`.\n',
   'scripts/win/installer.sh': '#!/bin/sh\n',
@@ -366,4 +384,72 @@ test('ключ FMA: GOFLAGS go-mac, wails build и mac-check совпадают 
   // checkAll видит расхождение
   assert.ok(run({ '.github/workflows/ci.yml': CI_YML.replace(FMA_GOFLAGS, '-gcflags=all=-N') }, '1.2.0').errors.some((e) => /GOFLAGS/.test(e)))
   assert.ok(run({ '.github/workflows/ci.yml': null }, '1.2.0').errors.some((e) => /ci\.yml: нет задания «go-mac»/.test(e)))
+})
+
+test('быстрые флаги фронта: svelte-check --tsgo, eslint --concurrency=auto, prettier --experimental-cli везде (169)', () => {
+  const files = () => ({ ...FRONT, '.github/workflows/ci.yml': CI_YML })
+  assert.deepEqual(checkFrontFlags(files()), [])
+  assert.deepEqual(run({}, '1.2.0').errors, [])
+  // флаг пропущен в одном месте — ошибка с именем файла
+  const miss = (file, from, to = '') => {
+    const f = files()
+    assert.ok(f[file].includes(from), `${file}: нет «${from}»`)
+    f[file] = f[file].replaceAll(from, to)
+    return checkFrontFlags(f)
+  }
+  assert.deepEqual(miss('scripts/check.sh', ' --tsgo'), ['scripts/check.sh: svelte-check (строка 3) без --tsgo (169)'])
+  assert.deepEqual(miss('scripts/check.ps1', ' --experimental-cli'), ['scripts/check.ps1: prettier (строка 1) без --experimental-cli (169)'])
+  assert.deepEqual(miss('scripts/precheck.mjs', ', "--concurrency=auto"'), ['scripts/precheck.mjs: eslint (строка 2) без --concurrency=auto (169)'])
+  assert.equal(miss('.github/workflows/ci.yml', ' --concurrency=auto').length, 1)
+  assert.deepEqual(miss('frontend/package.json', ' --experimental-cli', ' --check'), [
+    'frontend/package.json: prettier (scripts.format) без --experimental-cli (169)',
+    'frontend/package.json: prettier (scripts.format:check) без --experimental-cli (169)',
+  ])
+  assert.equal(run({ 'scripts/check.sh': FRONT['scripts/check.sh'].replace(' --tsgo', '') }, '1.2.0').errors.length, 1)
+  // число вместо auto и «похожий» флаг не засчитываются
+  assert.equal(miss('scripts/check.sh', '--concurrency=auto', '--concurrency=4').length, 1)
+  assert.equal(miss('scripts/check.sh', ' --tsgo', ' --tsgo-experimental-api').length, 1)
+  // упоминание в комментарии — не вызов; удалённый вызов и пропавший файл — ошибки
+  assert.deepEqual(miss('scripts/precheck.mjs', '// prettier, eslint, svelte-check', '// npx eslint без флага'), [])
+  assert.deepEqual(miss('scripts/check.sh', "  step 'eslint' --dir \"$fe\" npx eslint . --max-warnings 0 --concurrency=auto\n"), ['scripts/check.sh: нет вызова eslint (ждали с --concurrency=auto, 169)'])
+  assert.deepEqual(checkFrontFlags({ ...files(), 'scripts/check.ps1': null }), ['scripts/check.ps1: нет файла (флаги проверок фронта, 169)'])
+  assert.equal(checkFrontFlags({}).length, FRONT_FILES.length)
+  // битый package.json — нет вызовов, а не исключение
+  assert.equal(checkFrontFlags({ ...files(), 'frontend/package.json': '{' }).length, 3)
+})
+
+test('быстрые флаги фронта: комментарии, продолжения строк и run: > (169, ревью)', () => {
+  const files = () => ({ ...FRONT, '.github/workflows/ci.yml': CI_YML })
+  const add = (file, tail) => checkFrontFlags({ ...files(), [file]: files()[file] + tail })
+  // комментарий с вызовом без флага — не вызов (sh, ps1, yml, mjs; целая строка и хвост)
+  assert.deepEqual(add('scripts/check.sh', '# npx eslint .\n  step x npx eslint . --concurrency=auto # npx prettier .\n'), [])
+  assert.deepEqual(add('scripts/check.ps1', '# npx svelte-check\n'), [])
+  assert.deepEqual(add('.github/workflows/ci.yml', '      # npx prettier --check .\n'), [])
+  assert.deepEqual(add('scripts/precheck.mjs', '// ["eslint", "--max-warnings", "0"]\n'), [])
+  // флаг только в хвосте-комментарии не засчитывается
+  const f1 = files()
+  f1['scripts/check.sh'] = f1['scripts/check.sh'].replace(' --tsgo', ' # --tsgo')
+  assert.deepEqual(checkFrontFlags(f1), ['scripts/check.sh: svelte-check (строка 3) без --tsgo (169)'])
+  // продолжение строки: флаг на следующей физической строке (sh — «\», ps1 — «`»)
+  const f2 = files()
+  f2['scripts/check.sh'] = f2['scripts/check.sh'].replace('--max-warnings 0 --concurrency=auto', '--max-warnings 0 \\\n    --concurrency=auto')
+  f2['scripts/check.ps1'] = f2['scripts/check.ps1'].replace('--max-warnings 0 --concurrency=auto', '--max-warnings 0 `\n    --concurrency=auto')
+  assert.deepEqual(checkFrontFlags(f2), [])
+  // продолжение без нужного флага — ошибка с номером первой строки вызова
+  const f3 = files()
+  f3['scripts/check.sh'] = f3['scripts/check.sh'].replace('--max-warnings 0 --concurrency=auto', '--max-warnings 0 \\\n    --quiet')
+  assert.deepEqual(checkFrontFlags(f3), ['scripts/check.sh: eslint (строка 2) без --concurrency=auto (169)'])
+  // CRLF: «\r» после «\» не ломает продолжение
+  const f4 = files()
+  f4['scripts/check.sh'] = f4['scripts/check.sh'].replace('--max-warnings 0 --concurrency=auto', '--max-warnings 0 \\\r\n    --concurrency=auto')
+  assert.deepEqual(checkFrontFlags(f4), [])
+  // yml: `run: |` с продолжением; `run: >` сворачивается в одну строку
+  const yml = CI_YML.replace('run: npx eslint . --max-warnings 0 --concurrency=auto', 'run: |\n          npx eslint . --max-warnings 0 \\\n            --concurrency=auto')
+  assert.notEqual(yml, CI_YML)
+  assert.deepEqual(checkFrontFlags({ ...files(), '.github/workflows/ci.yml': yml }), [])
+  const fold = CI_YML.replace('run: npx prettier --experimental-cli --check .', 'run: >\n          npx prettier --check\n          --experimental-cli .')
+  assert.notEqual(fold, CI_YML)
+  assert.deepEqual(checkFrontFlags({ ...files(), '.github/workflows/ci.yml': fold }), [])
+  const foldBad = CI_YML.replace('run: npx prettier --experimental-cli --check .', 'run: >\n          npx prettier --check\n          .')
+  assert.equal(checkFrontFlags({ ...files(), '.github/workflows/ci.yml': foldBad }).length, 1)
 })

@@ -588,16 +588,16 @@ if ((fe.length || feShared.length) && (part === "fe" || !feJob)) {
   const fePart = (pre, files) => chunks(files).map((c) => [...pre, ...c]);
   if (fe.length)
     step("prettier", () =>
-      res(npx(fePart(["prettier", "--check", "--log-level", "warn"], fe))),
+      res(npx(fePart(["prettier", "--experimental-cli", "--check", "--log-level", "warn"], fe))),
     );
   const lint = fe.filter((f) => /\.(ts|js|svelte)$/.test(f));
   if (lint.length)
     step("eslint", () =>
-      res(npx(fePart(["eslint", "--max-warnings", "0"], lint))),
+      res(npx(fePart(["eslint", "--max-warnings", "0", "--concurrency=auto"], lint))),
     );
   if (fe.some((f) => /\.(ts|svelte)$/.test(f))) {
     step("svelte-check", () =>
-      res(npx([["svelte-check", "--output", "human", "--fail-on-warnings"]])),
+      res(npx([["svelte-check", "--output", "human", "--fail-on-warnings", "--tsgo"]])),
     );
   }
   const src = [

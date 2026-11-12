@@ -6,6 +6,7 @@ frontend/dist/*
 frontend/package.json.md5
 frontend/wailsjs/go/models.ts.bak
 frontend/.vite/
+frontend/.svelte-check/
 *.exe
 *.dll
 

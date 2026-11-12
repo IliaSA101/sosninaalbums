@@ -9,7 +9,9 @@ export function sheetFrac(fx: number): number {
 }
 
 // Ячейка: <25 % до, >75 % после, центр — обмен (из ленты фото, не из разворота, центр = «после»).
-export function cellSide(fx: number, fromSpread: boolean): CellSide {
+// keep — зажат Ctrl (⌘): фото из ленты целиком «центр» — замена (168); у фото из альбома зоны прежние.
+export function cellSide(fx: number, fromSpread: boolean, keep = false): CellSide {
+  if (keep && !fromSpread) return 'center'
   const side: CellSide = fx < 0.25 ? 'before' : fx > 0.75 ? 'after' : 'center'
   return side === 'center' && !fromSpread ? 'after' : side
 }

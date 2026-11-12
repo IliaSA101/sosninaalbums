@@ -12,7 +12,8 @@ export type Payload = { kind: 'photos'; ids: string[]; fromSpread?: string } | {
 
 // Куда отпускаем.
 export type Target =
-  | { kind: 'cell'; spread: string; index: number; photo: string; side: 'before' | 'after' | 'center' }
+  // many — Ctrl (⌘) и из ленты несколько фото: заменить можно одним (168), подсветки нет, бросок объясняет тостом.
+  | { kind: 'cell'; spread: string; index: number; photo: string; side: 'before' | 'after' | 'center'; many?: boolean }
   // at — доля ширины листа под курсором 0…1 (есть только у самого листа на холсте; у соседа в ряду нет)
   | { kind: 'spread'; spread: string; at?: number }
   | { kind: 'mini'; spread: string; index: number; side: 'before' | 'after' }

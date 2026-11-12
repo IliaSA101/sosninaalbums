@@ -210,7 +210,6 @@
   onkeydown={(e) => through.event(e)}
   onkeyup={(e) => through.event(e)}
   onpointermove={(e) => through.event(e)}
-  onpointerover={(e) => through.event(e)}
   onpointerdowncapture={(e) => through.event(e)}
   onblur={() => through.off('blur')}
 />

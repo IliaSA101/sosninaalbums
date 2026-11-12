@@ -417,6 +417,8 @@ export function RenameDecor(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function RenameGridTemplate(arg1:string,arg2:string):Promise<void>;
 
+export function ReplacePhoto(arg1:string,arg2:string,arg3:string):Promise<app.GridResult>;
+
 export function ReplaceSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
 export function Rescan():Promise<void>;

@@ -818,6 +818,10 @@ export function RenameGridTemplate(arg1, arg2) {
   return window['go']['app']['App']['RenameGridTemplate'](arg1, arg2);
 }
 
+export function ReplacePhoto(arg1, arg2, arg3) {
+  return window['go']['app']['App']['ReplacePhoto'](arg1, arg2, arg3);
+}
+
 export function ReplaceSticker(arg1, arg2, arg3) {
   return window['go']['app']['App']['ReplaceSticker'](arg1, arg2, arg3);
 }

@@ -1,4 +1,4 @@
-"""Регресс переноса (166): R7 событие view посреди переноса фото на холсте.
+"""Регресс переноса (166): R7 событие view посреди переноса фото на холсте; R9 — Ctrl-замена фото на «Авто» (168).
 
 Лежит отдельно от reg_canvas.py (R4): два исполнителя правят разные файлы.
 Бросок берёт цель по нынешнему DOM (rehit в drag.svelte.ts). Тест держит кнопку, меняет вид через Go и отпускает
@@ -93,3 +93,78 @@ class DragMidView(RegressCase):
         self.wait_js(IDLE)
         self.settle()
         self.expect(self.q(".toast.error")).to_have_count(0)
+
+
+HINT_JS = "() => document.querySelector('.ghost-stack .hint')?.textContent ?? ''"
+FREE_THUMB_JS = "() => document.querySelector('.thumb:not(.used)')?.dataset.thumb ?? null"
+
+
+@bug(id="R9", fix="168 U1", src="168: замена фото на «Авто» с Ctrl, раскладка не меняется", red="cellSide без keep в hit.ts (центр из ленты снова «после»)")
+class ReplaceAuto(RegressCase):
+    def _center(self, sel: str) -> tuple[float, float]:
+        b = self.q(sel).first.bounding_box()
+        return b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
+
+    def _carry(self, thumb: str, cell: str, ctrl: bool) -> None:
+        """Фото из ленты довести до центра ячейки; Ctrl нажимаем уже посреди переноса, мышь после этого стоит."""
+        tx, ty = self._center(f".thumb[data-thumb='{thumb}']")
+        m = self.page.mouse
+        m.move(tx, ty)
+        m.down()
+        m.move(tx + 20, ty + 10, steps=3)
+        cx, cy = self._center(f".cell[data-photo='{cell}']")
+        m.move(cx, cy, steps=8)
+        self.wait_js(DRAGGING)
+        if ctrl:
+            self.page.keyboard.down("Control")
+
+    def _drop(self, ctrl: bool) -> None:
+        self.page.mouse.up()
+        if ctrl:
+            self.page.keyboard.up("Control")
+        self.wait_js(IDLE)
+
+    def test_ctrl_replace_auto(self):
+        """Ctrl: фото встаёт на место второго, прямоугольники те же, прежнее в ленте; Ctrl+Z возвращает; без Ctrl — пятое фото.
+
+        Фото стенда одного размера (1600×1067, scripts/qa-albums.go), поэтому геометрию со своим кадром
+        (другие пропорции, подрезка) покрывает Go — TestReplacePhotoKeepsRects; здесь — жест и cellSide."""
+        v0 = self.album([4])
+        photos = v0["spreads"][0]["photos"]
+        rects = v0["spreads"][0]["rects"]
+        self.wait_js("(n) => document.querySelectorAll('.cell[data-drop=cell]').length === n", 4)
+        self.stable_rect(f".cell[data-photo='{photos[1]}']")
+        new = self.st.ev(FREE_THUMB_JS)
+        self.assertTrue(new, "в ленте нет свободного фото")
+
+        # Без Ctrl: подсказка клавиши, фото встаёт рядом (5 фото, как раньше).
+        self._carry(new, photos[1], ctrl=False)
+        self.wait_js("() => document.querySelector('.ghost-stack .hint')?.textContent === 'Ctrl — заменить фото'")
+        rev0 = self.rev()
+        self._drop(ctrl=False)
+        self.assertEqual(len(self.wait_rev(rev0)["spreads"][0]["photos"]), 5, "без Ctrl фото должно встать рядом")
+        rev0 = self.rev()
+        self.page.keyboard.press("Control+z")
+        v = self.wait_rev(rev0)
+        self.assertEqual(v["spreads"][0]["photos"], photos)
+
+        # С Ctrl: подпись «Заменить фото» сразу после нажатия, замена без перестройки.
+        self.wait_js("(n) => document.querySelectorAll('.cell[data-drop=cell]').length === n", 4)
+        self.stable_rect(f".cell[data-photo='{photos[1]}']")
+        self._carry(new, photos[1], ctrl=True)
+        self.wait_js("() => document.querySelector('.ghost-stack .hint')?.textContent === 'Заменить фото'")
+        rev0 = self.rev()
+        self._drop(ctrl=True)
+        sp = self.wait_rev(rev0)["spreads"][0]
+        self.assertEqual(sp["photos"], [photos[0], new, photos[2], photos[3]], "новое фото должно встать на место второго")
+        self.assertEqual(sp["rects"], rects, "раскладка сменилась")
+        self.wait_js("(id) => !document.querySelector(`.thumb[data-thumb='${id}']`)?.classList.contains('used')", photos[1])
+        self.expect(self.q(".thumb[data-thumb='%s'] .check" % photos[1])).to_have_count(0)
+        self.expect(self.q(".toast")).to_contain_text("Прежнее фото вернулось в ленту")
+
+        # Ctrl+Z — один шаг назад.
+        rev0 = self.rev()
+        self.page.keyboard.press("Control+z")
+        v = self.wait_rev(rev0)
+        self.assertEqual(v["spreads"][0]["photos"], photos)
+        self.assertEqual(v["spreads"][0]["rects"], rects)

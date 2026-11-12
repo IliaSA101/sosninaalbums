@@ -6,7 +6,7 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} })
 vi.mock('../../../wailsjs/go/app/App', () => ({}))
 
 // Слушатели окна у drag: тест сам двигает мышь и отпускает.
-const ls = vi.hoisted(() => ({ move: null as ((e: unknown) => void) | null, up: null as (() => void) | null }))
+const ls = vi.hoisted(() => ({ move: null as ((e: unknown) => void) | null, up: null as ((e: unknown) => void) | null }))
 vi.stubGlobal('window', {
   addEventListener: (t: string, f: never) => {
     if (t === 'pointermove') ls.move = f
@@ -71,7 +71,7 @@ describe('зона разреза (094)', () => {
     drag.start(down, () => ({ kind: 'photos', ids: ['p1'], fromSpread: 's1' }))
     ls.move!({ clientX: 40, clientY: 10 })
     expect(drag.active).toBe(true)
-    ls.up!()
+    ls.up!({ ctrlKey: false, metaKey: false })
     // Щелчок того же отпускания гасит drag, даже с Ctrl.
     expect(cutClick(click(true), 's1', 1)).toBe(false)
     await tick()

@@ -1,6 +1,6 @@
 // Перетаскивание на событиях указателя: так полностью управляем видом
 // «призрака» и подсветкой мест, куда можно отпустить.
-import { primaryPress } from '../core/platform'
+import { primaryPress, toggleKey } from '../core/platform'
 import type { Payload, Target } from '../core/types'
 import { store } from '../core/store.svelte'
 import { dropOn } from './dropact'
@@ -24,6 +24,8 @@ class Drag {
   x = $state(0)
   y = $state(0)
   target = $state<Target | null>(null)
+  // Зажат Ctrl (⌘) — фото из ленты на фото «Авто» заменяет, а не встаёт рядом (168).
+  keep = $state(false)
   // Сессия источника: место показывает он сам, общие подсветки (черты, «+») молчат.
   private session = $state.raw<DragSession | null>(null)
   // Ключ подсвечиваемого места: компоненты сравнивают его со своим.
@@ -66,13 +68,15 @@ class Drag {
       }
       this.x = ev.clientX
       this.y = ev.clientY
+      this.keep = toggleKey(ev)
       this.target = this.aim(ev.clientX, ev.clientY, this.payload!)
       edges.feed(ev.clientX, ev.clientY)
     }
-    const up = () => {
+    const up = (ev: PointerEvent) => {
       off()
       if (!this.active) return
       const p = this.payload!
+      this.keep = toggleKey(ev)
       // Вид мог смениться, пока мышь стояла (правка агента, 149 Т5): цель — по нынешнему DOM, а не по последнему
       // движению, иначе бросок уйдёт в исчезнувший разворот или на сдвинувшийся индекс.
       this.rehit()
@@ -92,12 +96,8 @@ class Drag {
           () => s.settle(false),
         )
     }
-    const esc = (ev: KeyboardEvent) => {
-      if (ev.key !== 'Escape') return
-      ev.stopPropagation() // Esc отменяет только перенос: режимы и меню под ним не берут
-      ev.preventDefault()
-      this.cancel()
-    }
+    const keys = this.onKey
+    const mod = this.onMod
     const lost = () => this.cancel()
     const hidden = () => document.visibilityState === 'hidden' && this.cancel()
     const wheel = () => this.active && wheelHint.wheel()
@@ -106,7 +106,8 @@ class Drag {
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', lost)
       window.removeEventListener('blur', lost)
-      window.removeEventListener('keydown', esc, true)
+      window.removeEventListener('keydown', keys, true)
+      window.removeEventListener('keyup', mod, true)
       window.removeEventListener('wheel', wheel, true)
       document.removeEventListener('visibilitychange', hidden)
       if (this.end === off) this.end = null
@@ -116,9 +117,27 @@ class Drag {
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', lost)
     window.addEventListener('blur', lost)
-    window.addEventListener('keydown', esc, true) // захват: раньше слушателей режимов и меню
+    window.addEventListener('keydown', keys, true) // захват: раньше слушателей режимов и меню
+    window.addEventListener('keyup', mod, true)
     window.addEventListener('wheel', wheel, { capture: true, passive: true })
     document.addEventListener('visibilitychange', hidden)
+  }
+
+  // Ctrl (⌘) нажали или отпустили при неподвижной мыши: цель под курсором другая (168). Клавишу не называем —
+  // читаем состояние модификатора из события, остальные клавиши его не меняют.
+  private onMod = (ev: KeyboardEvent) => {
+    if (!this.active) return
+    const keep = toggleKey(ev)
+    if (keep === this.keep) return
+    this.keep = keep
+    this.rehit()
+  }
+
+  private onKey = (ev: KeyboardEvent) => {
+    if (ev.key !== 'Escape') return this.onMod(ev)
+    ev.stopPropagation() // Esc отменяет только перенос: режимы и меню под ним не берут
+    ev.preventDefault()
+    this.cancel()
   }
 
   // Отмена без броска (Esc, pointercancel, потеря окна, скрытие, новый жест): щелчок после неё не гасится.
@@ -133,7 +152,7 @@ class Drag {
   }
 
   private aim(x: number, y: number, p: Payload): Target | null {
-    return this.session ? this.session.hit(x, y) : hit(x, y, p)
+    return this.session ? this.session.hit(x, y) : hit(x, y, p, this.keep)
   }
 
   // Клик сразу после перетаскивания не должен ничего выделять.
@@ -149,6 +168,7 @@ class Drag {
     edges.stop()
     wheelHint.end()
     this.active = false
+    this.keep = false
     this.payload = null
     this.target = null
     document.body.classList.remove('dragging')
@@ -168,16 +188,18 @@ function fromIndex(p: PhotoPayload, spread: string): number {
   return p.ids.length === 1 && p.fromSpread === spread ? (store.sheet(spread)?.photos.indexOf(p.ids[0]) ?? -1) : -1
 }
 
-function cellTarget(d: Data, p: Payload, fx: number): Target | null {
+function cellTarget(d: Data, p: Payload, fx: number, keep: boolean): Target | null {
   if (p.kind !== 'photos') return null
-  // Обмен — только для фото из разворота; из ленты центр = «вставить после».
-  const side = cellSide(fx, !!p.fromSpread)
+  // Обмен — только для фото из разворота; из ленты центр = «вставить после», с Ctrl (⌘) — весь кадр «заменить» (168).
+  const side = cellSide(fx, !!p.fromSpread, keep)
   if (p.ids.length === 1 && p.ids[0] === d.photo) return null
   const index = +d.index!
   // До/после соседа на своём листе — фото останется где было (095 сц. 7). На холсте щели не сводятся: соседи
   // по порядку не обязательно рядом (сц. 8).
   if (side !== 'center' && photoNoop('cell', p, d.spread!, fromIndex(p, d.spread!), gapOf(index, side))) return null
-  return { kind: 'cell', spread: d.spread!, index, photo: d.photo!, side }
+  const t: Target = { kind: 'cell', spread: d.spread!, index, photo: d.photo!, side }
+  // Заменить можно одним фото: с несколькими цель без подсветки, бросок объяснит тостом.
+  return keep && !p.fromSpread && p.ids.length > 1 ? { ...t, many: true } : t
 }
 
 // Миниатюра фото в ленте: правая половина j и левая половина j+1 — одна щель (095 сц. 6), цель всегда «до щели».
@@ -187,7 +209,7 @@ function chipTarget(d: Data, p: PhotoPayload, fx: number): Target | null {
   return { kind: 'chip', spread: d.spread!, index: at, photo: d.photo!, side: 'before' }
 }
 
-function hit(x: number, y: number, p: Payload): Target | null {
+function hit(x: number, y: number, p: Payload, keep: boolean): Target | null {
   const el = dropEl(x, y)
   if (!el) return null
   // Разворот в ленте и во «Всех разворотах» переносит сессия живой перестановки (096, reorder.svelte.ts): цель с щелью
@@ -198,7 +220,7 @@ function hit(x: number, y: number, p: Payload): Target | null {
   const fx = (x - r.left) / r.width
   switch (d.drop) {
     case 'cell':
-      return cellTarget(d, p, fx)
+      return cellTarget(d, p, fx, keep)
     case 'spread':
       if (photoNoop('spread', p, d.spread!)) return null // свой лист: бросок ничего не меняет
       // Доля ширины листа выбирает страницу для новых мест (042); у соседа в ряду точки нет — там «свободнее».
@@ -238,6 +260,7 @@ function mini(el: HTMLElement, x: number): Target {
 
 function keyOf(t: Target | null): string {
   if (!t) return ''
+  if ('many' in t && t.many) return '' // несколько фото на одну цель: подсветки нет, бросок объяснит тостом
   switch (t.kind) {
     case 'cell':
       return `cell:${t.photo}:${t.side}`
@@ -256,9 +279,9 @@ function keyOf(t: Target | null): string {
     case 'place':
       return `place:${t.place}`
     case 'backdrop':
-      return t.many ? '' : `backdrop:${t.scope}`
+      return `backdrop:${t.scope}`
     case 'cover':
-      return t.many ? '' : 'cover'
+      return 'cover'
     case 'bin':
       return 'bin'
   }

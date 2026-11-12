@@ -2,7 +2,8 @@
 // Ловит механику выпуска, которую до сих пор находило только ревью: версия в четырёх местах (wails.json,
 // README «Status», «Что нового», CHANGELOG), `needs` публикации в release.yml (0.11), эталоны для arm64,
 // LICENSE = GPL v3 и условие 7(b) в NOTICE.md (0.23), прямой вызов scripts/… из workflow без +x (110, Т3),
-// установщик Windows: задание win-check и имя exe в zip с версией (111, Т3).
+// установщик Windows: задание win-check и имя exe в zip с версией (111, Т3), одинаковые быстрые флаги
+// svelte-check / eslint / prettier во всех местах вызова (169).
 // Без --version берётся productVersion из wails.json (тогда проверяется согласованность остальных мест).
 // Выход ≠ 0 и список ошибок.
 import crypto from 'node:crypto'
@@ -275,6 +276,114 @@ export function checkFmaFlags(ci, rel) {
   return errors
 }
 
+// ---- быстрые флаги проверок фронта (169) ----
+
+// Инструмент, обязательный флаг и регэксп с границей (`--tsgo` не равен `--tsgo-experimental-api`).
+export const FRONT_FLAGS = [
+  ['svelte-check', '--tsgo', /--tsgo(?![\w-])/],
+  ['eslint', '--concurrency=auto', /--concurrency=auto(?![\w-])/],
+  ['prettier', '--experimental-cli', /--experimental-cli(?![\w-])/],
+]
+
+// Файлы с вызовами проверок фронта. pre-commit не входит: 1–50 файлов, выигрыш 0,1 с (169-3).
+export const FRONT_FILES = ['scripts/check.sh', 'scripts/check.ps1', 'scripts/precheck.mjs', '.github/workflows/ci.yml', 'frontend/package.json']
+
+// Логические строки: [{ n, text }], n — номер первой физической строки. Строки-комментарии (`#`; в mjs —
+// `//`) и хвост « # …» отброшены; продолжения склеены (`\` в sh и yml, «`» в ps1; в mjs не бывает), блок
+// `run: >` в yml — в одну строку (так его сворачивает YAML), `run: |` — построчно, как он и исполняется.
+// Предел: « #» внутри кавычек считается началом комментария (у вызовов проверок фронта таких строк нет).
+function logicalLines(file, text) {
+  const lines = text.split('\n')
+  const mjs = file.endsWith('.mjs')
+  const cont = file.endsWith('.ps1') ? '`' : '\\'
+  const out = []
+  let cur = null // незавершённая строка с продолжением
+  for (let i = 0; i < lines.length; i++) {
+    let t = lines[i]
+    if (t.trimStart().startsWith(mjs ? '//' : '#')) continue
+    if (!mjs) t = t.replace(/\s#.*$/, '')
+    const fold = file.endsWith('.yml') && /^(\s*)(- )?run:\s*>[+-]?\d?$/.exec(t.trimEnd())
+    if (fold) {
+      const indent = fold[1].length + (fold[2] ? 2 : 0)
+      const parts = []
+      let j = i + 1
+      for (; j < lines.length; j++) {
+        if (lines[j].trim() === '') continue
+        if (lines[j].length - lines[j].trimStart().length <= indent) break
+        if (!lines[j].trimStart().startsWith('#')) parts.push(lines[j].replace(/\s#.*$/, '').trim())
+      }
+      out.push({ n: i + 1, text: parts.join(' ') })
+      i = j - 1
+      continue
+    }
+    const more = !mjs && t.trimEnd().endsWith(cont)
+    const body = more ? t.trimEnd().slice(0, -1) : t
+    if (cur) cur.text += ' ' + body.trim()
+    else cur = { n: i + 1, text: body }
+    if (!more) (out.push(cur), (cur = null))
+  }
+  if (cur) out.push(cur)
+  return out
+}
+
+// Вызовы инструмента в тексте: [{ line, args }]. Вызов — `npx <tool>` (sh, ps1, yml), `"<tool>"` в массиве
+// аргументов (precheck.mjs; флаги — до закрывающей `]`), начало команды в scripts package.json. Упоминание
+// в комментарии или в имени шага не считается; продолжения строк и `run: >` склеены (logicalLines).
+function frontCalls(file, text, tool) {
+  const calls = []
+  if (file.endsWith('package.json')) {
+    let scripts
+    try {
+      scripts = JSON.parse(text).scripts || {}
+    } catch {
+      return calls
+    }
+    const re = new RegExp(`^\\s*(?:npx\\s+)?${tool}(?![\\w.-])(.*)$`)
+    for (const [name, cmd] of Object.entries(scripts)) {
+      for (const part of String(cmd).split(/&&|\|\||;/)) {
+        const m = re.exec(part)
+        if (m) calls.push({ line: `scripts.${name}`, args: m[1] })
+      }
+    }
+    return calls
+  }
+  const logical = logicalLines(file, text)
+  if (file.endsWith('.mjs')) {
+    // массив аргументов бывает в несколько строк: ищем по тексту без комментариев, номер — по смещению
+    const joined = logical.map((l) => l.text).join('\n')
+    for (const m of joined.matchAll(new RegExp(`"${tool}"([^\\]]*)\\]`, 'g'))) {
+      calls.push({ line: `строка ${logical[joined.slice(0, m.index).split('\n').length - 1].n}`, args: m[1] })
+    }
+    return calls
+  }
+  const re = new RegExp(`\\bnpx\\s+${tool}(?![\\w.-])(.*)`)
+  for (const l of logical) {
+    const m = re.exec(l.text)
+    if (m) calls.push({ line: `строка ${l.n}`, args: m[1] })
+  }
+  return calls
+}
+
+// Страж одинаковых флагов: у каждого вызова svelte-check — `--tsgo`, eslint — `--concurrency=auto` (число даёт
+// ESLintPoorConcurrencyWarning на малом числе файлов), prettier — `--experimental-cli` во всех местах FRONT_FILES.
+// files[путь] — текст файла или null/undefined (нет файла). Расхождение — ошибка с именем файла (169).
+export function checkFrontFlags(files) {
+  const errors = []
+  for (const file of FRONT_FILES) {
+    const text = files[file]
+    if (text === null || text === undefined) {
+      errors.push(`${file}: нет файла (флаги проверок фронта, 169)`)
+      continue
+    }
+    for (const [tool, flag, re] of FRONT_FLAGS) {
+      const calls = frontCalls(file, text, tool)
+      if (!calls.length) errors.push(`${file}: нет вызова ${tool} (ждали с ${flag}, 169)`)
+      for (const c of calls) if (!re.test(c.args)) errors.push(`${file}: ${tool} (${c.line}) без ${flag} (169)`)
+    }
+  }
+  return errors
+}
+
 // ---- права на скрипты в workflow ----
 
 // Строки команд из `run:` всех workflow: [{ file, line, text }] (line — номер в файле, с 1). Однострочный
@@ -408,6 +517,7 @@ export function checkAll(root, version) {
   if (yml === null) errors.push('.github/workflows/release.yml: нет файла')
   else errors.push(...checkNeeds(yml), ...checkArm64(root, yml), ...checkInstaller(root, yml))
   errors.push(...checkFmaFlags(read(root, '.github/workflows/ci.yml'), yml))
+  errors.push(...checkFrontFlags(Object.fromEntries(FRONT_FILES.map((f) => [f, read(root, f)]))))
   return { version, errors }
 }
 

@@ -168,7 +168,7 @@ export function passThrough(e: Mods): boolean {
 // указателя несёт настоящее состояние модификаторов и перекрывает прежний признак; blur/скрытие окна и новое положение
 // панели (или другое выделенное) — сброс на состояние последнего указателя (lastPointer; не задан — нет модификаторов).
 export type ThroughEv =
-  | ({ type: 'keydown' | 'keyup' | 'pointermove' | 'pointerdown' | 'pointerover' } & Mods)
+  | ({ type: 'keydown' | 'keyup' | 'pointermove' | 'pointerdown' } & Mods)
   | { type: 'blur' | 'hidden' }
   | { type: 'place'; lastPointer?: Mods }
 

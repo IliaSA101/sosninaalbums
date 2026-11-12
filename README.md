@@ -6,7 +6,7 @@
 **Sosnina Albums** is a desktop application for laying out wedding photo albums, built for a working photographer. Pick folders with photos, drag frames onto spreads (or let auto-assembly do it), flip through layout variants, and export spreads as 300 dpi JPEGs for the print shop. Layouts are computed exactly and **photos are not cropped without your say**: a frame keeps the photo's aspect ratio unless you choose full bleed (crops up to 30 %), crop to fill the sheet (up to 15 %) or set your own crop; margins and gaps are set in millimetres.
 
 - Platform: Windows, macOS, Linux (WebView2, WKWebView, WebKitGTK). Stack: Go 1.26 + [Wails](https://wails.io) v2 + Svelte 5 + TypeScript.
-- Status: version 0.38.0, actively developed; the UI is in Russian.
+- Status: version 0.39.0, actively developed; the UI is in Russian.
 - Built together with photographer Marina Sosnina ([Sosnina films](https://sosnina-films.ru)) and used in her work.
 
 ![Sosnina Albums: auto-build an album, flip through spreads, try layouts](docs/media/demo.webp)
@@ -88,6 +88,7 @@ https://github.com/user-attachments/assets/21096f35-4c1b-4954-b130-9b8cecf1a5b1
 - Окно «Макеты» и мелочи (0.36): макеты альбома в крупном просмотре «на ваших фото», «Применить…» с выбором, ползунок размера плиток, отбор «Набор · Стиль» и «Новые». Кернинг своих шрифтов одинаков на холсте и в выгрузке; рукописные надписи не подскакивают при правке; зоны «Разрезать» и «Склеить» в ленте крупнее; тост «Диск E: снова доступен»; «Продолжить» после обрыва отправки досылает только недостающее.
 - Макеты и мелочи (0.37): у каждой темы альбома свои компоновки (титулы, один кадр с воздухом, навылет, полароиды, лесенка), украшения встают по центру страницы, старые макеты школы и сада — в теме «Прежние макеты». «Всегда» у «Открыть альбом» для агента; на Mac место съёмок привязывается к диску; фото OneDrive «только в сети» не скачиваются молча и показываются в «не прочитано».
 - Обложка и одна ссылка (0.38): обложка в листалке — в формате страницы альбома, того же качества, лицевая сторона заполнена целиком, без полос; у альбома одна ссылка — она остаётся за ним при переносе файла, переименовании и на другом компьютере, повторная выгрузка обновляет тот же альбом у клиента, а у скопированного файла программа спрашивает: обновить прежний альбом или выгрузить как новый («Сохранить как» и «Новый альбом из шаблона» получают новую ссылку).
+- Замена фото на «Авто» (0.39): фото из ленты, брошенное на фото разворота «Авто» с зажатым Ctrl (на Mac ⌘), встаёт в ту же ячейку — раскладка не перестраивается, прежнее фото возвращается в ленту, всё отменяется одним шагом; под перетаскиваемым фото подсказка «Ctrl — заменить фото». В справке F1 «▶ Смотреть», нажатая сразу после открытия, не идёт в сеть за уже скачанным роликом; на Linux щелчок с Shift (Ctrl, Alt) сквозь мини-панель фото снова доходит до фото.
 
 ### Уровни интерфейса
 

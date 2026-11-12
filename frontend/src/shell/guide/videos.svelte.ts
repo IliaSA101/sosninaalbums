@@ -27,9 +27,19 @@ class Videos {
   private consentWin: string | null = null // для какого ролика открыть окно после «Разрешить»
   private checking = false // между щелчком и началом хода идёт чтение согласия
   private seq = 0
+  private pending: Promise<void> | null = null // идущий load(): «Смотреть» ждёт его, а не гадает по пустому списку
+  private loaded = false // список от Go уже приходил
 
   // Список роликов каталога из кэша Go (без сети; без каталога — пусто).
-  async load() {
+  load(): Promise<void> {
+    const p: Promise<void> = this.fetch().finally(() => {
+      if (this.pending === p) this.pending = null
+    })
+    this.pending = p
+    return p
+  }
+
+  private async fetch() {
     const my = ++this.seq
     try {
       const list = ((await Api.GuideVideos()) as unknown as VideoItem[] | null) ?? []
@@ -37,6 +47,7 @@ class Videos {
       const ids = new Set(list.map((i) => i.id))
       for (const id of [...this.items.keys()]) if (!ids.has(id)) this.items.delete(id)
       for (const i of list) this.items.set(i.id, i)
+      this.loaded = true
     } catch {
       // нет связи с Go — остаётся прежнее; строка «Ролик» не критична для справочника
     }
@@ -51,7 +62,10 @@ class Videos {
   }
 
   // «▶ Смотреть»: скачан — окно сразу, без сети; нет — загрузка в самом окне (с вопросом о сети, если согласия нет).
+  // Щелчок раньше ответа GuideVideos: сначала дожидаемся списка (кэш, без сети), иначе скачанный ролик пошёл бы в сеть.
   async watch(id: string) {
+    if (this.pending) await this.pending
+    else if (!this.loaded) await this.load()
     if (this.items.get(id)?.ready) return this.play(id)
     await this.get([id], id)
   }

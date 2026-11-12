@@ -2,6 +2,7 @@
 import * as Api from '../../../wailsjs/go/app/App'
 import { dropPlan, type DropPlan } from './drop'
 import { dropGrid } from './dropgrid.svelte'
+import { replaceHint } from './ghostnote'
 import { dropLanded } from '../prefs/cardgroups.svelte'
 import { COVER_ID } from '../geom/sheet'
 import { isCopyReq } from '../core/copies'
@@ -54,6 +55,9 @@ async function act(plan: DropPlan) {
       return
     case 'place':
       await placePhotos(plan.spread, plan.place, plan.ids, plan.fromSpread)
+      return
+    case 'replace':
+      await replacePhoto(plan.spread, plan.target, plan.id)
       return
     case 'reject':
       store.notify(plan.text)
@@ -124,10 +128,38 @@ async function placePhotos(spread: string, place: string, ids: string[], fromSpr
   if (!fromSpread || ids.length > 1) store.selected.clear()
   const lost = left - (replaced ? 1 : 0)
   const short = lost > 0 ? `Не хватило мест: ${lost} фото остались ${fromSpread ? 'на прежних местах' : 'в ленте'}` : ''
+  placedToast(spread, moved, replaced, short, named)
+}
+
+// Тост после переноса из ленты (общий у placePhotos и replacePhoto): «Перенесено из …», при замене — «Прежнее фото вернулось
+// в ленту» с «Вернуть»; short — «Не хватило мест».
+function placedToast(spread: string, moved: Moved[], replaced: boolean, short: string, named: string[]) {
   const from = landedText(moved, spread)
   store.stepToast(
     replaced ? from : [from, short].filter(Boolean).join('. '),
     replaced ? [short, 'Прежнее фото вернулось в ленту'].filter(Boolean) : [],
     named,
   )
+}
+
+// Ctrl (⌘) + фото из ленты на фото «Авто» (168): Go ставит его на место target, раскладка та же. left = 1 — прежнее фото
+// ушло в ленту; 0 при том же rev — холостая правка, ничего не показываем.
+async function replacePhoto(spread: string, target: string, id: string) {
+  const sent = await gated([id], false)
+  if (!sent) return
+  const rev = store.view.rev
+  const moved = store.movedFrom(sent, spread)
+  let left = 0
+  let named: string[] = []
+  const op = async () => {
+    const r = (await Api.ReplacePhoto(spread, target, sent[0])) as unknown as GridResult
+    left = r.left
+    named = r.named ?? []
+    return r.view
+  }
+  if (!(await store.run(op()))) return
+  if (store.view.rev === rev) return
+  store.selected.clear()
+  replaceHint.used = true
+  placedToast(spread, moved, left > 0, '', named)
 }

@@ -57,7 +57,7 @@ golang.org/x/sync v0.24.0 (BSD-3-Clause)
 golang.org/x/sys v0.49.0 (BSD-3-Clause)
 golang.org/x/text v0.43.0 (BSD-3-Clause)
 golang.org/x/time v0.15.0 (BSD-3-Clause)
-Стандартная библиотека Go go1.26.10 (BSD-3-Clause)
+Стандартная библиотека Go go1.26.11 (BSD-3-Clause)
 
 2. npm-пакеты в сборке интерфейса (19)
 ---------------------------------------------
@@ -70,9 +70,9 @@ Prettier, Vitest и др.) в программу не входят.
 @jridgewell/sourcemap-codec 1.6.0 (MIT)
 @jridgewell/trace-mapping 0.3.31 (MIT)
 @sveltejs/acorn-typescript 1.0.13 (MIT)
-@types/estree 1.0.9 (MIT)
+@types/estree 1.0.10 (MIT)
 acorn 8.19.0 (MIT)
-aria-query 5.3.1 (Apache-2.0)
+aria-query 5.3.0 (Apache-2.0)
 axobject-query 4.1.0 (Apache-2.0)
 clsx 2.1.1 (MIT)
 devalue 5.9.4 (MIT)
@@ -80,8 +80,8 @@ esm-env 1.2.2 (MIT)
 esrap 2.4.0 (MIT)
 is-reference 3.0.3 (MIT)
 locate-character 3.0.0 (MIT)
-magic-string 0.30.21 (MIT)
-svelte 5.57.2 (MIT)
+magic-string 1.4.5 (MIT)
+svelte 5.57.3 (MIT)
 zimmerframe 1.1.5 (MIT)
 
 3. Шрифты (33 гарнитур, 62 файлов; внутри программы: internal/text/fonts)
@@ -1910,7 +1910,7 @@ SOFTWARE.
   - golang.org/x/sys v0.49.0
   - golang.org/x/text v0.43.0
   - golang.org/x/time v0.15.0
-  - Стандартная библиотека Go go1.26.10
+  - Стандартная библиотека Go go1.26.11
 
 Copyright 2009 The Go Authors.
 
@@ -2024,7 +2024,7 @@ SOFTWARE.
 
 === Лицензия 36: MIT ===
 Применяется к:
-  - @types/estree 1.0.9
+  - @types/estree 1.0.10
 
 MIT License
 
@@ -2078,7 +2078,7 @@ THE SOFTWARE.
 
 === Лицензия 38: Apache-2.0 ===
 Применяется к:
-  - aria-query 5.3.1
+  - aria-query 5.3.0
   - axobject-query 4.1.0
 
 Apache License
@@ -2356,7 +2356,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 === Лицензия 44: MIT ===
 Применяется к:
-  - magic-string 0.30.21
+  - magic-string 1.4.5
 
 Copyright 2018 Rich Harris
 
@@ -2369,7 +2369,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 === Лицензия 45: MIT ===
 Применяется к:
-  - svelte 5.57.2
+  - svelte 5.57.3
 
 Copyright (c) 2016-2025 [Svelte Contributors](https://github.com/sveltejs/svelte/graphs/contributors)
 

@@ -106,13 +106,13 @@ function goodDeps(ov = {}) {
   const files = {
     '.github/workflows/release.yml': 'jobs:\n  pack:\n    runs-on: ubuntu-24.04\n',
     '.github/workflows/ci.yml': 'node-version: "24.11.1"\n',
-    'go.mod': 'go 1.26.0\ntoolchain go1.26.10\nrequire github.com/wailsapp/wails/v2 v2.16.0\n',
+    'go.mod': 'go 1.26.0\ntoolchain go1.26.11\nrequire github.com/wailsapp/wails/v2 v2.16.0\n',
     ...ov.files,
   }
   const answers = {
     'makensis -VERSION': { code: 0, out: NSIS_CI },
     'gh auth': { code: 0, out: '' },
-    'go version': { code: 0, out: 'go version go1.26.10 linux/amd64' },
+    'go version': { code: 0, out: 'go version go1.26.11 linux/amd64' },
     'wails version': { code: 0, out: '\nWails CLI v2.16.0\n' },
     'git status': { code: 0, out: '' },
     'git tag': { code: 0, out: '' },
@@ -146,7 +146,7 @@ test('quickChecks: каждая поломка даёт ровно один FAIL
     ['gh не вошёл', { answers: { 'gh auth': { code: 1, out: 'not logged' } } }, /gh auth login/],
     ['нет ключа', { stat: () => { throw new Error('ENOENT') } }, /нет файла/],
     ['другой Node', { nodeVersion: 'v22.1.0' }, /в CI 24\.11\.1/],
-    ['Go другой', { answers: { 'go version': { code: 0, out: 'go version go1.25.0 linux/amd64' } } }, /go1\.26\.10/],
+    ['Go другой', { answers: { 'go version': { code: 0, out: 'go version go1.25.0 linux/amd64' } } }, /go1\.26\.11/],
     ['нет wails', { answers: { 'wails version': { code: 127, out: 'ENOENT' } } }, /go install .*wails@v2\.16\.0/],
     ['другой wails', { answers: { 'wails version': { code: 0, out: 'Wails CLI v2.15.0' } } }, /v2\.16\.0/],
     ['грязная копия', { answers: { 'git status': { code: 0, out: ' M a.go\n' } } }, /закоммитьте/],

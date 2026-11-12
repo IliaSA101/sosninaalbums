@@ -190,9 +190,9 @@ if [ $run_ui = 1 ]; then
   fe="$root/frontend"
   step 'версия node' node_version
   # Кэши prettier и eslint — в .gotmp (env.sh), не в дереве.
-  step 'prettier' --dir "$fe" npx prettier --check . --cache --cache-location "$prettier_cache" --log-level warn
-  step 'eslint' --dir "$fe" npx eslint . --max-warnings 0 --cache --cache-location "$eslint_cache/"
-  step 'svelte-check' --dir "$fe" npx svelte-check --output human --fail-on-warnings
+  step 'prettier' --dir "$fe" npx prettier --check . --experimental-cli --cache --cache-location "$prettier_cache" --log-level warn
+  step 'eslint' --dir "$fe" npx eslint . --max-warnings 0 --concurrency=auto --cache --cache-location "$eslint_cache/"
+  step 'svelte-check' --dir "$fe" npx svelte-check --output human --fail-on-warnings --tsgo
   step 'vitest' --no-warn --dir "$fe" npm test -- --reporter=default --reporter=json "--outputFile.json=$ui_json"
   step 'npm build' --no-warn --dir "$fe" npm run build
   step 'контракт биндингов' node scripts/bindings-contract.mjs --check

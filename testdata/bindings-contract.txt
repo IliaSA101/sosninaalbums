@@ -202,6 +202,7 @@ method RemovePhotos(arg1:Array<string>):Promise<model.View>
 method RenameBin(arg1:string,arg2:string):Promise<model.View>
 method RenameDecor(arg1:string,arg2:string,arg3:string):Promise<void>
 method RenameGridTemplate(arg1:string,arg2:string):Promise<void>
+method ReplacePhoto(arg1:string,arg2:string,arg3:string):Promise<APP.GridResult>
 method ReplaceSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method Rescan():Promise<void>
 method ResetFrame(arg1:string):Promise<model.View>

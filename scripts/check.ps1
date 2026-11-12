@@ -207,9 +207,9 @@ if ($runGo) {
 }
 if ($runUi) {
     $fe = Join-Path $root 'frontend'
-    Step 'prettier' { npx prettier --check . --cache --cache-location $prettierCache --log-level warn } $fe
-    Step 'eslint' { npx eslint . --max-warnings 0 --cache --cache-location $eslintCache } $fe
-    Step 'svelte-check' { npx svelte-check --output human --fail-on-warnings } $fe
+    Step 'prettier' { npx prettier --check . --experimental-cli --cache --cache-location $prettierCache --log-level warn } $fe
+    Step 'eslint' { npx eslint . --max-warnings 0 --concurrency=auto --cache --cache-location $eslintCache } $fe
+    Step 'svelte-check' { npx svelte-check --output human --fail-on-warnings --tsgo } $fe
     Step 'vitest' { npm test -- --reporter=default --reporter=json "--outputFile.json=$uiJson" } $fe -NoWarn
     Step 'npm build' { npm run build } $fe -NoWarn
     Step 'контракт биндингов' { node scripts/bindings-contract.mjs --check } $root
