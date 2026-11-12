@@ -1,0 +1,14 @@
+{
+  "fabrika": {
+    "sha256": "09983f0f21a973e00d7bb0aa2fd1b058dcdfb2112c8299ce6c03e7cace213e52",
+    "version": 2
+  },
+  "fsfera": {
+    "sha256": "ec4463b24c8d47f97af942bd90494221e567167e31ef660f5af045620b89564c",
+    "version": 1
+  },
+  "netprint": {
+    "sha256": "b18ffb7571a26cef68a5416b6f3f034c78b37a05f7162622fb5b6f413af2bd1a",
+    "version": 2
+  }
+}
