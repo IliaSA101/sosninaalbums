@@ -1,0 +1,170 @@
+{
+  "version": 15,
+  "product": "album",
+  "folders": [],
+  "settings": {
+    "pageW": 300,
+    "pageH": 300,
+    "margin": 12,
+    "gap": 3,
+    "layflat": true,
+    "foldAny": false,
+    "dpi": 300,
+    "bg": "",
+    "safe": 8
+  },
+  "spreads": [
+    {
+      "id": "5e1f0a2b3c41",
+      "photos": [
+        "0ae6bd2c853a5587"
+      ],
+      "texts": [
+        {
+          "id": "0a0b0c0d0e01",
+          "x": 40,
+          "y": 50,
+          "w": 100,
+          "auto": true,
+          "text": "Анна и Павел",
+          "style": {
+            "font": "my:0e82892fea1dcf13",
+            "size": 36,
+            "color": "#222222",
+            "align": "center"
+          }
+        },
+        {
+          "id": "0a0b0c0d0e02",
+          "x": 300,
+          "y": 200,
+          "w": 80,
+          "text": "12 июня",
+          "style": {
+            "font": "my:b0d0b0d0b0d0b0d0",
+            "size": 24,
+            "color": "#222222",
+            "align": "center",
+            "bold": true,
+            "italic": true
+          }
+        },
+        {
+          "id": "0a0b0c0d0e03",
+          "x": 289.61,
+          "y": 100,
+          "w": 30.78,
+          "auto": true,
+          "text": "Свадьба",
+          "style": {
+            "font": "montserrat",
+            "size": 20,
+            "color": "#222222",
+            "align": "center"
+          }
+        }
+      ]
+    }
+  ],
+  "photos": {
+    "0ae6bd2c853a5587": {
+      "path": "Фото/a.jpg",
+      "w": 3000,
+      "h": 2000,
+      "size": 1000,
+      "caption": {
+        "text": "Анна",
+        "style": {
+          "font": "my:0e82892fea1dcf13",
+          "size": 10,
+          "color": "#222222",
+          "align": "center"
+        }
+      },
+      "abs": "C:\\album\\Фото\\a.jpg"
+    }
+  },
+  "fonts": {
+    "my:0e82892fea1dcf13": {
+      "name": "Lato"
+    },
+    "my:b0d0b0d0b0d0b0d0": {
+      "name": "Bodoni Moda"
+    }
+  },
+  "cover": {
+    "sheet": {
+      "id": "cover",
+      "photos": null,
+      "caps": {
+        "style": {
+          "font": "my:b0d0b0d0b0d0b0d0",
+          "size": 9,
+          "color": "#222222",
+          "align": "center"
+        },
+        "pad": 1
+      }
+    },
+    "spec": {
+      "preset": "fsfera-thin",
+      "wrap": 20,
+      "steps": [
+        {
+          "upto": 5,
+          "mm": 6
+        },
+        {
+          "upto": 9,
+          "mm": 8
+        },
+        {
+          "upto": 13,
+          "mm": 10
+        },
+        {
+          "upto": 17,
+          "mm": 12
+        },
+        {
+          "upto": 22,
+          "mm": 14
+        },
+        {
+          "upto": 26,
+          "mm": 16
+        },
+        {
+          "upto": 30,
+          "mm": 18
+        },
+        {
+          "upto": 34,
+          "mm": 20
+        },
+        {
+          "upto": 38,
+          "mm": 22
+        },
+        {
+          "upto": 42,
+          "mm": 24
+        },
+        {
+          "upto": 47,
+          "mm": 26
+        },
+        {
+          "upto": 52,
+          "mm": 28
+        },
+        {
+          "upto": 57,
+          "mm": 30
+        }
+      ],
+      "safe": 8,
+      "spineSafe": 12
+    }
+  }
+}

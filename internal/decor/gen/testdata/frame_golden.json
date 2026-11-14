@@ -1,0 +1,230 @@
+{
+  "corners/oval/w=0": [
+    "bedf97a6ad909ed3",
+    "a7f926f91d29c618"
+  ],
+  "corners/oval/w=2.5": [
+    "146974fa7161e758",
+    "7fcf785b048fcfeb"
+  ],
+  "corners/rect/w=0": [
+    "bedf97a6ad909ed3",
+    "a7f926f91d29c618"
+  ],
+  "corners/rect/w=2.5": [
+    "146974fa7161e758",
+    "7fcf785b048fcfeb"
+  ],
+  "corners/round/w=0": [
+    "bedf97a6ad909ed3",
+    "a7f926f91d29c618"
+  ],
+  "corners/round/w=2.5": [
+    "146974fa7161e758",
+    "7fcf785b048fcfeb"
+  ],
+  "double/oval/w=0": [
+    "651cd3794a206bbe",
+    "87373807ac4bfd06"
+  ],
+  "double/oval/w=2.5": [
+    "08b72fd9079164e3",
+    "c539ad2d942cd435"
+  ],
+  "double/rect/w=0": [
+    "522ebc1dfbbe3a0a",
+    "c937e8a2723c27d3"
+  ],
+  "double/rect/w=2.5": [
+    "eb5408681a101018",
+    "7a78262b4356c0bd"
+  ],
+  "double/round/w=0": [
+    "bf1a6c1c7aeda32a",
+    "40bf86bba1aab45e"
+  ],
+  "double/round/w=2.5": [
+    "05a26c25665572f3",
+    "4d340947ba6fddd3"
+  ],
+  "gold/oval/w=0": [
+    "f5fcf18a6e66dc2e",
+    "2aca021cc632b68c"
+  ],
+  "gold/oval/w=2.5": [
+    "68ce65ea1b0fe789",
+    "46924c2f64ad39ea"
+  ],
+  "gold/rect/w=0": [
+    "90d41be1590422f3",
+    "5dd5d86dcda93e92"
+  ],
+  "gold/rect/w=2.5": [
+    "321ef2009a7f8d60",
+    "79c859ab00decb33"
+  ],
+  "gold/round/w=0": [
+    "af3e32584c36fdd8",
+    "d25f90c7440300e1"
+  ],
+  "gold/round/w=2.5": [
+    "3804dbe4d0d051eb",
+    "9a678c359eb890de"
+  ],
+  "line/oval/w=0": [
+    "d581dad6ae5d0b00",
+    "fd3031a9277a50d7"
+  ],
+  "line/oval/w=2.5": [
+    "6009b19f2f252cac",
+    "ea018c3e52d163ee"
+  ],
+  "line/rect/w=0": [
+    "4743bb6f85d3f465",
+    "a20916a2578933d8"
+  ],
+  "line/rect/w=2.5": [
+    "8e7070506dfa16bc",
+    "fdb4f4628234d624"
+  ],
+  "line/rot20": [
+    "3ee286ba96a348d0",
+    ""
+  ],
+  "line/round/w=0": [
+    "ba030185a98189ef",
+    "f4f63d2f6ac7818a"
+  ],
+  "line/round/w=2.5": [
+    "849918aa91b9a2b4",
+    "74b60b8c20e8f37b"
+  ],
+  "mat/oval/w=0": [
+    "e9bbc691d3ab7a4d",
+    "b2d2beff6c265539"
+  ],
+  "mat/oval/w=2.5": [
+    "915fca5a7e57a415",
+    "45e46cdd14690e95"
+  ],
+  "mat/rect/w=0": [
+    "6bbd179f09561654",
+    "62decce89581dbb2"
+  ],
+  "mat/rect/w=2.5": [
+    "2da1fa6ef733d1e6",
+    "f63bccbebef3c34a"
+  ],
+  "mat/round/w=0": [
+    "efe62db6f88b1e23",
+    "c6be5cea79c5c4c2"
+  ],
+  "mat/round/w=2.5": [
+    "6b6f7795456e7bdd",
+    "1d52c23655ce6a19"
+  ],
+  "polaroid/oval/w=0": [
+    "8b538b452b13327f",
+    "16abd969af8757dc"
+  ],
+  "polaroid/oval/w=2.5": [
+    "2dcfa47e0d3207b3",
+    "899e9de6197d19f0"
+  ],
+  "polaroid/rect/w=0": [
+    "7d6acf96bc0ac83b",
+    "0ec04f3bacef6248"
+  ],
+  "polaroid/rect/w=2.5": [
+    "933b79cd0ab1ac1e",
+    "619abacff31aa73e"
+  ],
+  "polaroid/round/w=0": [
+    "2d74ead06e64535c",
+    "a5f3b4a209d22f74"
+  ],
+  "polaroid/round/w=2.5": [
+    "017665e0259976a3",
+    "293901948b7d6252"
+  ],
+  "scallop/oval/w=0": [
+    "71d46ddd0b28e265",
+    "7a70276fc9c2555a"
+  ],
+  "scallop/oval/w=2.5": [
+    "3b0357a267325c73",
+    "56eb8b2ab8802305"
+  ],
+  "scallop/rect/w=0": [
+    "31710095ff09941f",
+    "76c12c2c2a5590d8"
+  ],
+  "scallop/rect/w=2.5": [
+    "d882a0ac219d8334",
+    "b9d2e189f8bcf957"
+  ],
+  "scallop/rot20": [
+    "f2603530d48e9304",
+    ""
+  ],
+  "scallop/round/w=0": [
+    "383970428fc860f5",
+    "3e0d2e0dd0bf92df"
+  ],
+  "scallop/round/w=2.5": [
+    "b01629826a3130b3",
+    "2faaa2ff1cfac35b"
+  ],
+  "soft/oval/w=0": [
+    "b83209904b8d1c61",
+    "4097c2fef5d08d78"
+  ],
+  "soft/oval/w=2.5": [
+    "c74219f1511e8f60",
+    "c3e4068c23e5a313"
+  ],
+  "soft/rect/w=0": [
+    "757385b94bb1be8b",
+    "0ce51c26c055827d"
+  ],
+  "soft/rect/w=2.5": [
+    "31c9cf34c9915f08",
+    "04519958bde87f81"
+  ],
+  "soft/round/w=0": [
+    "eb67fbbfe431f7ed",
+    "93c3bd0cea149d25"
+  ],
+  "soft/round/w=2.5": [
+    "534756dbc53cb87d",
+    "d689b00498084fb0"
+  ],
+  "stitch/oval/w=0": [
+    "34020aa6a3a94be8",
+    "93d1abb3817c4c5e"
+  ],
+  "stitch/oval/w=2.5": [
+    "2fb507085f07058d",
+    "141a1e21675b8395"
+  ],
+  "stitch/rect/w=0": [
+    "6d20578b36fb8089",
+    "e3149f84207a8416"
+  ],
+  "stitch/rect/w=2.5": [
+    "41726f13f7037410",
+    "673a398b1fdcf801"
+  ],
+  "stitch/rot20": [
+    "f1f3ebf3738416de",
+    ""
+  ],
+  "stitch/round/w=0": [
+    "a5b6d3f6f542b2ec",
+    "766cbdb3bf5193a3"
+  ],
+  "stitch/round/w=2.5": [
+    "c53105f273608cec",
+    "5be924ec2b4746ae"
+  ]
+}

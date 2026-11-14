@@ -1,0 +1,55 @@
+{
+  "version": 3,
+  "folders": [
+    { "path": "Отбор" }
+  ],
+  "settings": {
+    "pageW": 300,
+    "pageH": 300,
+    "margin": 12,
+    "gap": 3,
+    "layflat": true,
+    "dpi": 300,
+    "bg": "#f6f1e7"
+  },
+  "spreads": [
+    {
+      "id": "5e1f0a2b3c4d",
+      "photos": ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"],
+      "name": "Сборы",
+      "bgL": "#1c1c1c",
+      "texts": [
+        {
+          "id": "c0ffee000001",
+          "x": 20,
+          "y": 30,
+          "w": 120,
+          "text": "Иван и Мария",
+          "style": { "font": "cormorant", "size": 28, "color": "#333333", "align": "center" }
+        }
+      ]
+    },
+    {
+      "id": "6a7b8c9d0e1f",
+      "photos": ["cccccccccccccccc"],
+      "grid": [
+        { "id": "c0ffee000002", "x": 12.5, "y": 12, "w": 127.25, "h": 84.83, "photo": "cccccccccccccccc" },
+        { "id": "c0ffee000003", "x": 300, "y": 150, "w": 60, "h": 30, "fit": "contain" }
+      ]
+    }
+  ],
+  "photos": {
+    "aaaaaaaaaaaaaaaa": {
+      "path": "Отбор/a.jpg",
+      "w": 300,
+      "h": 200,
+      "frame": { "s": 1.35, "x": -0.4, "y": 0.25 },
+      "caption": {
+        "text": "Первый танец",
+        "style": { "font": "ptserif", "size": 9, "color": "#555555", "align": "left", "italic": true }
+      }
+    },
+    "bbbbbbbbbbbbbbbb": { "path": "Отбор/b.jpg", "w": 200, "h": 300 },
+    "cccccccccccccccc": { "path": "Отбор/c.jpg", "w": 300, "h": 200 }
+  }
+}

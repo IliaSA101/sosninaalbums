@@ -1,0 +1,332 @@
+[
+  {
+    "name": "x0-own0",
+    "xmp": {},
+    "own": null,
+    "want": {
+      "rating": 0,
+      "label": "",
+      "labelText": "",
+      "flag": 0
+    }
+  },
+  {
+    "name": "x0-own1",
+    "xmp": {},
+    "own": {},
+    "want": {
+      "rating": 0,
+      "label": "",
+      "labelText": "",
+      "flag": 0
+    }
+  },
+  {
+    "name": "x0-own2",
+    "xmp": {},
+    "own": {
+      "rating": 0
+    },
+    "want": {
+      "rating": 0,
+      "label": "",
+      "labelText": "",
+      "flag": 0
+    }
+  },
+  {
+    "name": "x0-own3",
+    "xmp": {},
+    "own": {
+      "label": ""
+    },
+    "want": {
+      "rating": 0,
+      "label": "",
+      "labelText": "",
+      "flag": 0
+    }
+  },
+  {
+    "name": "x0-own4",
+    "xmp": {},
+    "own": {
+      "flag": 0
+    },
+    "want": {
+      "rating": 0,
+      "label": "",
+      "labelText": "",
+      "flag": 0
+    }
+  },
+  {
+    "name": "x0-own5",
+    "xmp": {},
+    "own": {
+      "rating": 5,
+      "label": "purple",
+      "flag": -1
+    },
+    "want": {
+      "rating": 5,
+      "label": "purple",
+      "labelText": "",
+      "flag": -1
+    }
+  },
+  {
+    "name": "x0-own6",
+    "xmp": {},
+    "own": {
+      "label": "green"
+    },
+    "want": {
+      "rating": 0,
+      "label": "green",
+      "labelText": "",
+      "flag": 0
+    }
+  },
+  {
+    "name": "x1-own0",
+    "xmp": {
+      "rating": 4,
+      "label": "red",
+      "flag": 1
+    },
+    "own": null,
+    "want": {
+      "rating": 4,
+      "label": "red",
+      "labelText": "",
+      "flag": 1
+    }
+  },
+  {
+    "name": "x1-own1",
+    "xmp": {
+      "rating": 4,
+      "label": "red",
+      "flag": 1
+    },
+    "own": {},
+    "want": {
+      "rating": 4,
+      "label": "red",
+      "labelText": "",
+      "flag": 1
+    }
+  },
+  {
+    "name": "x1-own2",
+    "xmp": {
+      "rating": 4,
+      "label": "red",
+      "flag": 1
+    },
+    "own": {
+      "rating": 0
+    },
+    "want": {
+      "rating": 0,
+      "label": "red",
+      "labelText": "",
+      "flag": 1
+    }
+  },
+  {
+    "name": "x1-own3",
+    "xmp": {
+      "rating": 4,
+      "label": "red",
+      "flag": 1
+    },
+    "own": {
+      "label": ""
+    },
+    "want": {
+      "rating": 4,
+      "label": "",
+      "labelText": "",
+      "flag": 1
+    }
+  },
+  {
+    "name": "x1-own4",
+    "xmp": {
+      "rating": 4,
+      "label": "red",
+      "flag": 1
+    },
+    "own": {
+      "flag": 0
+    },
+    "want": {
+      "rating": 4,
+      "label": "red",
+      "labelText": "",
+      "flag": 0
+    }
+  },
+  {
+    "name": "x1-own5",
+    "xmp": {
+      "rating": 4,
+      "label": "red",
+      "flag": 1
+    },
+    "own": {
+      "rating": 5,
+      "label": "purple",
+      "flag": -1
+    },
+    "want": {
+      "rating": 5,
+      "label": "purple",
+      "labelText": "",
+      "flag": -1
+    }
+  },
+  {
+    "name": "x1-own6",
+    "xmp": {
+      "rating": 4,
+      "label": "red",
+      "flag": 1
+    },
+    "own": {
+      "label": "green"
+    },
+    "want": {
+      "rating": 4,
+      "label": "green",
+      "labelText": "",
+      "flag": 1
+    }
+  },
+  {
+    "name": "x2-own0",
+    "xmp": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    },
+    "own": null,
+    "want": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    }
+  },
+  {
+    "name": "x2-own1",
+    "xmp": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    },
+    "own": {},
+    "want": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    }
+  },
+  {
+    "name": "x2-own2",
+    "xmp": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    },
+    "own": {
+      "rating": 0
+    },
+    "want": {
+      "rating": 0,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    }
+  },
+  {
+    "name": "x2-own3",
+    "xmp": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    },
+    "own": {
+      "label": ""
+    },
+    "want": {
+      "rating": 2,
+      "label": "",
+      "labelText": "",
+      "flag": -1
+    }
+  },
+  {
+    "name": "x2-own4",
+    "xmp": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    },
+    "own": {
+      "flag": 0
+    },
+    "want": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": 0
+    }
+  },
+  {
+    "name": "x2-own5",
+    "xmp": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    },
+    "own": {
+      "rating": 5,
+      "label": "purple",
+      "flag": -1
+    },
+    "want": {
+      "rating": 5,
+      "label": "purple",
+      "labelText": "",
+      "flag": -1
+    }
+  },
+  {
+    "name": "x2-own6",
+    "xmp": {
+      "rating": 2,
+      "label": "other",
+      "labelText": "Клиенту",
+      "flag": -1
+    },
+    "own": {
+      "label": "green"
+    },
+    "want": {
+      "rating": 2,
+      "label": "green",
+      "labelText": "",
+      "flag": -1
+    }
+  }
+]

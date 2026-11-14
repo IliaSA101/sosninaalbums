@@ -1,0 +1,194 @@
+[
+  {
+    "file": "pages-300/01-1.jpg",
+    "spread": 1,
+    "w": 1181,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "ef12f719085af5c013c28e256e04442099029d2d35dc6dcd47a083f11575bb3f"
+  },
+  {
+    "file": "pages-300/01-2.jpg",
+    "spread": 1,
+    "w": 1181,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "f4e39ea60d7d9a0e4a624dccc0b258e3119dcaae1b1ff053fe3db4f12dce14cc"
+  },
+  {
+    "file": "pages-300/02-1.jpg",
+    "spread": 2,
+    "w": 1181,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "0c4c42505d58e5e13877b160124f648fa7bc51ae2f669b1c29d2ba4c54aacd6a"
+  },
+  {
+    "file": "pages-300/02-2.jpg",
+    "spread": 2,
+    "w": 1181,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "3931143fb6af8251ada03f1f6dacf14a683ad65fd3884185e8e848b97e4a76a4"
+  },
+  {
+    "file": "pages-300/03-1.jpg",
+    "spread": 3,
+    "w": 1181,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "bab09c921e863c830e651711dd5baebef419a8dd0761a5449a45681422d9e7b2"
+  },
+  {
+    "file": "pages-300/03-2.jpg",
+    "spread": 3,
+    "w": 1181,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "bab09c921e863c830e651711dd5baebef419a8dd0761a5449a45681422d9e7b2"
+  },
+  {
+    "file": "pages-300/04-1.jpg",
+    "spread": 4,
+    "w": 1181,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "6eb9954d939fd5e4aa69fd026604e3dbfa2f376625b0145df1b9676ce0934367"
+  },
+  {
+    "file": "pages-300/04-2.jpg",
+    "spread": 4,
+    "w": 1181,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "7ada07141b5f006c978fcde0c3434feebae0dd103fe07827ea2a2c0a72029eb8"
+  },
+  {
+    "file": "pages-72/01-1.jpg",
+    "spread": 1,
+    "w": 283,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "57e2fe0ebb2886b7b77a61c27f6059fdfbe70c1c5d399cb47b442cbf84e5222c"
+  },
+  {
+    "file": "pages-72/01-2.jpg",
+    "spread": 1,
+    "w": 283,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "4ab0ed88e05ed043a6a67f6e5c77b1eec135619c7437d9c12c8c416abcddde91"
+  },
+  {
+    "file": "pages-72/02-1.jpg",
+    "spread": 2,
+    "w": 283,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "3bd16f376636f4b6d96932b26c1afd7055cf821a655d8b96f33e68b2a936a57d"
+  },
+  {
+    "file": "pages-72/02-2.jpg",
+    "spread": 2,
+    "w": 283,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "97b812fa541a2b9feb8ab5794ecfbfd4a2de693344f9b2cd919569a22343bdaf"
+  },
+  {
+    "file": "pages-72/03-1.jpg",
+    "spread": 3,
+    "w": 283,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "634b15937e45b166b94722084597589d608eff787b1ebbc450425efe95ff327c"
+  },
+  {
+    "file": "pages-72/03-2.jpg",
+    "spread": 3,
+    "w": 283,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "634b15937e45b166b94722084597589d608eff787b1ebbc450425efe95ff327c"
+  },
+  {
+    "file": "pages-72/04-1.jpg",
+    "spread": 4,
+    "w": 283,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "173af5caac0e54e28339d8906a8f60f3fce552b0635912709d42e4e351f25bbf"
+  },
+  {
+    "file": "pages-72/04-2.jpg",
+    "spread": 4,
+    "w": 283,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "c39e59a34f6ca44d3a2aef6668c6ed56d047af7ee7f6c72fb19888074fe6aebc"
+  },
+  {
+    "file": "spreads-300/01.jpg",
+    "spread": 1,
+    "w": 2362,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "faed1eec0024d9f2d9d769887ee367b60f2539309ca29396ecce1a7fed8f2560"
+  },
+  {
+    "file": "spreads-300/02.jpg",
+    "spread": 2,
+    "w": 2362,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "3e76ea13e2d66c541c2faee6681581df399810ba148da8a7232c9dbd84e40675"
+  },
+  {
+    "file": "spreads-300/03.jpg",
+    "spread": 3,
+    "w": 2362,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "2f995858575fd9f7efa9587d468fc1c3ff5e0164a6a393b9bcb6fa54fde0164d"
+  },
+  {
+    "file": "spreads-300/04.jpg",
+    "spread": 4,
+    "w": 2362,
+    "h": 827,
+    "dpi": 300,
+    "rgba": "bcfa0e13816653135eda1ba3b71804468ee6d18ad91581bb7e22164ad4904899"
+  },
+  {
+    "file": "spreads-72/01.jpg",
+    "spread": 1,
+    "w": 567,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "726e9db1a06bf1cd54fb3d28b2e7b960a6c7d4b914bcf94dc9437227bc4880fb"
+  },
+  {
+    "file": "spreads-72/02.jpg",
+    "spread": 2,
+    "w": 567,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "6e68b6e598ae83a943a8f2a76f906de153d0d9be19d2a877fe9c560b47fe54e8"
+  },
+  {
+    "file": "spreads-72/03.jpg",
+    "spread": 3,
+    "w": 567,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "ce99ce00fa651815ff714258dd382b4f8ad2fbf101e2d21565fdfd072c448cbb"
+  },
+  {
+    "file": "spreads-72/04.jpg",
+    "spread": 4,
+    "w": 567,
+    "h": 198,
+    "dpi": 72,
+    "rgba": "2dbe3cf6b5bb3d22c3fa88f86cba56e01fa07795c2be6f90854bf432ccaf30b0"
+  }
+]

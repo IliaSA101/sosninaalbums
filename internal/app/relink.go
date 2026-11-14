@@ -1,0 +1,192 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/osx"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
+	wr "github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+// Перенос проекта и перепривязка недостающих фото (спека 006, §8).
+
+// DriveHint — подсказка «Диск E: → F:». From пуст — подсказки нет.
+type DriveHint struct {
+	From  string `json:"from"`  // буква пропавшего диска, «E»
+	To    string `json:"to"`    // буква, на которой фото нашлись
+	Found int    `json:"found"` // сколько пропавших фото с диска From лежит там же на To
+	Total int    `json:"total"` // сколько пропавших фото было на диске From
+}
+
+// RelinkResult — итог поиска в папке: сколько привязано, сколько осталось
+// недостающими и сколько нашлось в нескольких равноценных местах (не привязаны).
+type RelinkResult struct {
+	View      model.View `json:"view"`
+	Found     int        `json:"found"`
+	Missing   int        `json:"missing"`
+	Ambiguous int        `json:"ambiguous"`
+}
+
+// SuggestDrive предлагает смену буквы диска: пропавшие фото на самой частой
+// пропавшей букве ищутся на остальных существующих дисках. Только чтение.
+func (a *App) SuggestDrive() DriveHint {
+	defer guard("SuggestDrive")
+	refs := a.editor().Refs()
+	var gone []string
+	for _, id := range oneOfFamily(missingOf(refs, a.exists)) { // числа подсказки — по файлам (098-20)
+		gone = append(gone, refs[id].Path)
+	}
+	// Буквы дисков тоже через Reachable: отключённая сетевая буква иначе держит подсказку.
+	return DriveHint(library.SuggestDrive(gone, driveHas))
+}
+
+// driveHas — файл на кандидате в диски есть: том отвечает, ссылка не уходит на сетевой путь.
+func driveHas(p string) bool {
+	if !reachable(p) {
+		return false
+	}
+	_, err := library.StatLocal(p)
+	return err == nil
+}
+
+// RelinkDrive меняет букву диска у недостающих фото и папок, если файлы нашлись
+// на новой. Буквы A–Z (допускается «E:»); ошибка — только для неверных букв.
+func (a *App) RelinkDrive(from, to string) (model.View, error) {
+	ed := a.editor()
+	f, ok1 := paths.DriveLetter(from)
+	t, ok2 := paths.DriveLetter(to)
+	if !ok1 || !ok2 || f == t {
+		return ed.View(), fmt.Errorf("нужны две разные буквы диска")
+	}
+	v := a.changed(ed.RelinkDrive(f, t))
+	a.rescan()
+	return v, nil
+}
+
+// RelinkFolder спрашивает папку и ищет в ней недостающие фото.
+func (a *App) RelinkFolder() (RelinkResult, error) {
+	dir, err := wr.OpenDirectoryDialog(a.ctx, wr.OpenDialogOptions{
+		Title:            "Где лежат недостающие фото",
+		DefaultDirectory: a.dialogDir(prefs.DirPhotos),
+	})
+	if err != nil {
+		return RelinkResult{View: a.editor().View()}, err
+	}
+	if dir == "" {
+		return RelinkResult{View: a.out(a.editor().View())}, nil
+	}
+	res, err := a.RelinkFolderPath(dir)
+	if err == nil {
+		a.rememberDir(prefs.DirPhotos, filepath.Dir(dir))
+	}
+	return res, err
+}
+
+// RelinkFolderPath ищет недостающие фото в папке dir (локальной) по имени и
+// размеру файла и перепривязывает найденные. Не нашлось — проект не меняется.
+func (a *App) RelinkFolderPath(dir string) (res RelinkResult, rerr error) {
+	defer guardErr("RelinkFolderPath", &rerr)
+	ed := a.editor()
+	res = RelinkResult{View: ed.View()}
+	if err := paths.CheckLocalPath(dir); err != nil {
+		return res, err
+	}
+	dir = filepath.Clean(dir)
+	if st, err := library.StatLocal(dir); err != nil || !st.IsDir() {
+		return res, fmt.Errorf("не папка: %s", dir)
+	}
+	refs := ed.Refs()
+	ids := missingOf(refs, a.exists) // синхронно: ответ нужен сразу, вызов — от действия пользователя
+	if len(ids) == 0 {
+		res.View = a.out(res.View) // ответ без ошибки — в цепочку видов (075)
+		return res, nil
+	}
+	// Одна запись на файл: копии едут вслед за ней (salbum.Relink), числа отчёта — по файлам (098-20).
+	ids = oneOfFamily(ids)
+	want := make([]library.Want, len(ids))
+	for i, id := range ids {
+		r := refs[id]
+		want[i] = library.Want{ID: id, Old: r.Path, Size: r.Size, W: r.W, H: r.H}
+	}
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	found, err := library.FindByName(ctx, dir, want, 0)
+	if err != nil {
+		return res, err
+	}
+	res.Found, res.Ambiguous = len(found.Paths), len(found.Ambiguous)
+	res.Missing = len(ids) - res.Found
+	if res.Found == 0 {
+		res.View = a.out(res.View)
+		return res, nil
+	}
+	res.View = a.changed(ed.Relink(found.Paths, dir))
+	a.rescan()
+	return res, nil
+}
+
+// oneOfFamily — из ID записей по одной на файл (семью копий, 098): запись с наименьшим номером,
+// исходная — первой. Порядок — как в ids по первому вхождению файла.
+func oneOfFamily(ids []string) []string {
+	at := make(map[string]int, len(ids)) // ID файла → индекс в out
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		base := model.BaseID(id)
+		i, ok := at[base]
+		if !ok {
+			at[base] = len(out)
+			out = append(out, id)
+		} else if model.CopyNo(id) < model.CopyNo(out[i]) {
+			out[i] = id
+		}
+	}
+	return out
+}
+
+// ShowPhotoInExplorer показывает файл фото в Проводнике. Путь берётся из ленты (свободное
+// фото, 106) или из проекта (запись, в том числе копия), от интерфейса не принимается (как
+// ShowInExplorer). Файла нет — открывается его папка; нет и её (или том не отвечает) — ошибка.
+func (a *App) ShowPhotoInExplorer(id string) error {
+	a.mu.Lock()
+	ph, inLib := a.byID[id]
+	a.mu.Unlock()
+	src := ph.Path
+	if !inLib {
+		r, ok := a.editor().Ref(id)
+		if !ok {
+			return errors.New("фото не найдено")
+		}
+		src = r.Path
+	}
+	path := filepath.Clean(src)
+	if err := paths.CheckLocalPath(path); err != nil {
+		return errors.New("путь к фото недоступен")
+	}
+	if !reachable(path) { // мёртвый сетевой том: без зависания на Stat
+		return errors.New("файл не найден")
+	}
+	if st, err := library.StatLocal(path); err == nil && !st.IsDir() {
+		return revealPath(path, true)
+	}
+	if dir := filepath.Dir(path); isDir(dir) {
+		return revealPath(dir, false)
+	}
+	return errors.New("файл не найден")
+}
+
+// revealPath — запуск файлового менеджера; в тестах подменяется, чтобы не стартовать процесс.
+// file — выделить файл в его папке, иначе открыть папку. Ждать завершения не нужно.
+var revealPath = osx.Reveal
+
+func isDir(p string) bool {
+	st, err := library.StatLocal(p)
+	return err == nil && st.IsDir()
+}

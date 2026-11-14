@@ -1,0 +1,11 @@
+// Package imgfile — один файл фото: заголовок JPEG (ориентация, цветовой профиль, XMP; у PNG и WebP — профиль),
+// пределы недоверенного файла и декод с учётом памяти. Ничего не знает о папках и
+// альбоме: им пользуются library (скан, миниатюры), export/render и album/salbum (проверка размера).
+//
+// Файлы: jpeghead — один проход по сегментам заголовка (Header, XMPPrefix); pnghead — профиль iCCP
+// PNG; webphead — чанки WebP (размер, ICCP); exif — ориентация,
+// обход IFD (exifWalk) и время съёмки (Head.Taken);
+// icc — цветовой профиль и класс Color; limits — CheckSize, CheckDims, OpenRegular, OpenOriented(Ctx);
+// header — DimsOf/FileDims (размеры по заголовку с пределом, ErrTooBig);
+// budget — общий бюджет пикселей декода (DecodeBudget, AcquireCtx).
+package imgfile

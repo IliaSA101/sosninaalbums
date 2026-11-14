@@ -1,0 +1,82 @@
+{
+  "version": 15,
+  "product": "album",
+  "folders": [],
+  "settings": {
+    "pageW": 300,
+    "pageH": 300,
+    "margin": 12,
+    "gap": 3,
+    "layflat": true,
+    "foldAny": false,
+    "dpi": 300,
+    "bg": "",
+    "safe": 8
+  },
+  "spreads": [
+    {
+      "id": "5e1f0a2b3c41",
+      "photos": [
+        "0ae6bd2c853a5587",
+        "d36f7f5ed8c67dfa",
+        "019f9d4d6287eccc"
+      ]
+    }
+  ],
+  "photos": {
+    "019f9d4d6287eccc": {
+      "path": "Фото/c.jpg",
+      "w": 3000,
+      "h": 2000,
+      "size": 1000,
+      "abs": "C:\\album\\Фото\\c.jpg"
+    },
+    "0ae6bd2c853a5587": {
+      "path": "Фото/a.jpg",
+      "w": 3000,
+      "h": 2000,
+      "size": 1000,
+      "abs": "C:\\album\\Фото\\a.jpg"
+    },
+    "d36f7f5ed8c67dfa": {
+      "path": "Фото/b.jpg",
+      "w": 3000,
+      "h": 2000,
+      "size": 1000,
+      "abs": "C:\\album\\Фото\\b.jpg"
+    }
+  },
+  "marks": [
+    {
+      "path": "Фото/a.jpg",
+      "abs": "C:\\album\\Фото\\a.jpg",
+      "rating": 4,
+      "bins": [
+        "b07d5e6aa",
+        "b3f9a01c2"
+      ]
+    },
+    {
+      "path": "Фото/b.jpg",
+      "abs": "C:\\album\\Фото\\b.jpg",
+      "bins": [
+        "b3f9a01c2"
+      ]
+    },
+    {
+      "path": "Фото/c.jpg",
+      "abs": "C:\\album\\Фото\\c.jpg",
+      "rating": 4
+    }
+  ],
+  "bins": [
+    {
+      "id": "b3f9a01c2",
+      "name": "Обязательно"
+    },
+    {
+      "id": "b07d5e6aa",
+      "name": "Для родителей"
+    }
+  ]
+}

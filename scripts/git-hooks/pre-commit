@@ -1,0 +1,67 @@
+#!/bin/sh
+# Pre-commit: не пускает в репозиторий личные и рабочие файлы.
+# Подключение (один раз): git config core.hooksPath scripts/git-hooks
+
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E \
+  '(^|/)CLAUDE\.md$|^\.claude/|^docs/(private|refs)/|\.salbum$|^\.testphotos/|(^|/)\.env' )
+if [ -n "$bad" ]; then
+  echo "pre-commit: эти файлы не должны попадать в git (инструкции агентов, личные данные, референсы):" >&2
+  echo "$bad" | sed 's/^/  /' >&2
+  echo "Убрать из индекса: git rm --cached <файл>" >&2
+  exit 1
+fi
+
+# Крупные бинарники (> 2 МБ) — почти наверняка случайность. Исключение — файл примера темы (стандартная редакция)
+# (internal/demopack/*.zip, до 20 МиБ; владелец 28.10, решения 0.30-142-31, -33) и эталоны тестов
+# (testdata/test-baseline*.json, текст до 4 МиБ: покрытие по блокам Go и UI растёт с кодом; владелец 31.10, 0.35/155 Т5).
+big=$(git diff --cached --name-only --diff-filter=ACMR | while read -r f; do
+  [ -f "$f" ] || continue
+  lim=2097152
+  case "$f" in
+    internal/demopack/*.zip) lim=20971520 ;;
+    testdata/test-baseline*.json) lim=4194304 ;;
+  esac
+  [ "$(wc -c < "$f")" -gt "$lim" ] && echo "$f"
+done)
+if [ -n "$big" ]; then
+  echo "pre-commit: файлы больше 2 МБ (internal/demopack/*.zip — больше 20 МиБ, testdata/test-baseline*.json — больше 4 МиБ):" >&2
+  echo "$big" | sed 's/^/  /' >&2
+  exit 1
+fi
+
+# Порог папок — scripts/limits.mjs (единственный источник пределов, 0.13.1) по индексу коммита: область фронта
+# ≤ 20 файлов кода без тестов, подпапок ≤ 20, код фронта — frontend/src/<группа>/<область>/<файл>; у Go счётчика нет.
+if ! over=$(node scripts/limits.mjs folders --cached); then
+  echo "pre-commit: порог папок (docs/STRUCTURE.md «Правила»):" >&2
+  echo "$over" | sed 's/^/  /' >&2
+  echo "Делить по смыслу; исключение - только с согласия владельца (scripts/folder-exceptions.txt)." >&2
+  exit 1
+fi
+
+# Быстрые проверки только файлов коммита (секунды); полный прогон — scripts/check.ps1 (Linux, macOS — check.sh).
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+gofiles=$(echo "$staged" | grep -E '\.go$')
+if [ -n "$gofiles" ]; then
+  # gofmt того же тулчейна, что go (toolchain в go.mod): системный gofmt другой версии форматирует иначе.
+  gf=$(go env GOROOT 2>/dev/null)/bin/gofmt
+  [ -x "$gf" ] || [ -x "$gf.exe" ] || gf=gofmt
+  unformatted=$(echo "$gofiles" | xargs -n 50 "$gf" -l)
+  if [ -n "$unformatted" ]; then
+    echo "pre-commit: не отформатировано gofmt:" >&2
+    echo "$unformatted" | sed 's/^/  /' >&2
+    exit 1
+  fi
+fi
+fefiles=$(echo "$staged" | grep -E '^frontend/' | grep -vE '^frontend/(wailsjs|dist)/|package(-lock)?\.json$' | grep -E '\.(ts|js|svelte|css|html|json)$' | sed 's|^frontend/||')
+if [ -n "$fefiles" ]; then
+  # xargs: при переносе сотен файлов командная строка Windows переполняется (npx — это .cmd, у cmd.exe предел 8 тыс. символов)
+  (cd frontend && echo "$fefiles" | xargs -n 50 npx prettier --check --log-level warn) || {
+    echo "pre-commit: prettier — запусти: cd frontend && npm run format" >&2
+    exit 1
+  }
+  lintfiles=$(echo "$fefiles" | grep -E '\.(ts|js|svelte)$')
+  if [ -n "$lintfiles" ]; then
+    (cd frontend && echo "$lintfiles" | xargs -n 50 npx eslint --max-warnings 0) || exit 1
+  fi
+fi
+exit 0

@@ -1,0 +1,18 @@
+{
+  "id": "print-fabrika",
+  "version": 1,
+  "minApp": "0.26.0",
+  "title": "Поправка Фабрики (тест)",
+  "about": "Тестовый набор: профиль Фабрики версии 3.",
+  "author": "Sosnina Albums",
+  "license": "CC0-1.0",
+  "source": "тест",
+  "items": [
+    {
+      "file": "fabrika.saprint",
+      "kind": "print",
+      "theme": "basic",
+      "name": "Фабрика Фотокниги"
+    }
+  ]
+}

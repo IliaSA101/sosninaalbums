@@ -1,0 +1,62 @@
+name: Ошибка
+description: Что-то работает не так или программа упала
+labels: [ошибка]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Версия программы
+      description: Подставляется, если вы пришли по кнопке «Сообщить о проблеме» в окне «О программе». Иначе — окно «О программе» либо «Что нового».
+      placeholder: "0.23.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: Система
+      options:
+        - Windows 10
+        - Windows 11
+        - macOS 12–14
+        - macOS 15
+        - macOS 26
+        - Linux (Ubuntu, Mint, Debian)
+        - Linux (другой дистрибутив)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги
+      description: Что вы делали по порядку, чтобы это случилось.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидалось
+    validations:
+      required: false
+  - type: textarea
+    id: actual
+    attributes:
+      label: Получилось
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Журнал log.txt
+      description: |
+        Где лежит: Windows — `%APPDATA%\SosninaAlbums\log.txt`, Mac — `~/Library/Application Support/SosninaAlbums/log.txt`, Linux — `~/.config/SosninaAlbums/log.txt`.
+        Вставьте последние строки. Личные фото и пути к ним не прикладывайте.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Личные данные
+      options:
+        - label: Я убрал из текста и log.txt личные пути, имена и фото
+          required: true
