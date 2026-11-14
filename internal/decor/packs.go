@@ -84,6 +84,14 @@ type packReg struct {
 	// Старые программы поле пропускают (неизвестные поля json игнорирует), у старых реестров его нет — 0.
 	ZipSize int64       `json:"zipSize,omitempty"`
 	Items   []packEntry `json:"items"`
+	// Темы наборов (170, design §2.2). Raw — то, что в файле: тип чужого поля не роняет реестр
+	// (0.39 их пропускает, 0.41 может изменить тип); после чтения — разобранные Themes и TV.
+	// Themes — объявления без учёта доверия (его решает rebuildThemes), TV ≥ 1 — реестр писала
+	// программа с темами (иначе набор из сети один раз перекачивается, спека 170-9).
+	ThemesRaw json.RawMessage `json:"themes,omitempty"`
+	TVRaw     json.RawMessage `json:"tv,omitempty"`
+	Themes    []themeDecl     `json:"-"`
+	TV        int             `json:"-"`
 }
 
 type packEntry struct {
@@ -99,6 +107,9 @@ type packEntry struct {
 	// установки. Ключ разворота — TplKey канонического JSON, с sha файла не совпадает; у старых
 	// реестров поля нет (картинки находятся по ключу, он и есть sha).
 	Src string `json:"src,omitempty"`
+	// Topic — тема предмета (170): id темы набора или встроенной; Theme остаётся базой для 0.29–0.39.
+	TopicRaw json.RawMessage `json:"topic,omitempty"`
+	Topic    string          `json:"-"`
 }
 
 // PackInfo — строка окна «Наборы библиотеки».
@@ -118,6 +129,9 @@ type PackInfo struct {
 	Print     int    `json:"print"` // 123: профили типографий (.saprint)
 	Bytes     int64  `json:"bytes"`
 	Removable bool   `json:"removable"`
+	// ThemesRead — реестр писала программа с темами (tv ≥ 1); решает перекачку наборов 0.39 (170-9).
+	// В биндинги не идёт.
+	ThemesRead bool `json:"-"`
 }
 
 // validPackID — ^[a-z0-9][a-z0-9-]{2,39}$ (как pack.ValidID: decor не импортирует pack), не
@@ -178,6 +192,9 @@ func readPackReg(path, id string) (*packReg, error) {
 		return nil, errors.New("нет версии или чужой id")
 	}
 	reg.Version = max(reg.Version, 1)
+	if note := reg.parseRegThemes().note(id); note != "" {
+		log.Printf("библиотека: реестр: %s", note)
+	}
 	if !validVer(reg.MinApp) {
 		reg.MinApp = ""
 	}
@@ -201,6 +218,7 @@ func readPackReg(path, id string) (*packReg, error) {
 		}
 		seen[e.Kind+e.Key] = true
 		e.Theme = packTheme(e.Theme)
+		e.Topic, e.TopicRaw = topicOfRaw(e.TopicRaw), nil
 		if e.Name = cleanName(e.Name); e.Name == "" {
 			e.Name = noName
 		}
@@ -285,7 +303,9 @@ func (s *Store) packItems(kind string) []Item {
 				continue
 			}
 			seen[e.Key] = true
-			b.items = append(b.items, e.item(r))
+			it := e.item(r)
+			it.Theme = s.packTopic(e) // тема набора, если её знает таблица; иначе база
+			b.items = append(b.items, it)
 		}
 		blocks = append(blocks, b)
 	}
@@ -342,7 +362,7 @@ func knownPresets(list []preset) int {
 
 func (r *packReg) info() PackInfo {
 	p := PackInfo{ID: r.ID, Title: r.Title, About: r.About, Author: r.Author, License: r.License, Source: r.Source,
-		Origin: r.Origin, Version: r.Version, Removable: true}
+		Origin: r.Origin, Version: r.Version, Removable: true, ThemesRead: r.TV > 0}
 	for _, e := range r.Items {
 		switch e.Kind {
 		case KindBg:
@@ -395,8 +415,13 @@ func (s *Store) Used() int64 {
 func (s *Store) PackDiskBytes(id string) int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.packDiskBytes(s.packOf(id))
+}
+
+// packDiskBytes — сумма файлов набора r на диске (nil — 0); под mu.
+func (s *Store) packDiskBytes(r *packReg) int64 {
 	var n int64
-	if r := s.packOf(id); r != nil {
+	if r != nil {
 		for _, e := range r.Items {
 			n += e.Bytes
 		}

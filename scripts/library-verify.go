@@ -5,30 +5,31 @@
 // строит album.PreviewTpl на страницах 20×30, 30×30 и 40×30 см, рамки рисует ServeFramePic.
 // Инструмент разработчика, не функция программы.
 //
-//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go [-app x.y.z] [-with донор.zip]... [-out папка] [-preview лист.png] набор.zip...
-//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go -pull <Библиотека> -pack <id> -out папка
-//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go scripts/library-verify-sprite.go -sprite набор.zip -out папка [-pick pick.json] [-with донор.zip]...
+//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go scripts/library-verify-themes.go [-app x.y.z] [-with донор.zip]... [-out папка] [-preview лист.png] набор.zip...
+//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go scripts/library-verify-themes.go -pull <Библиотека> -pack <id> -out папка
+//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go scripts/library-verify-sprite.go scripts/library-verify-themes.go -sprite набор.zip -out папка [-pick pick.json] [-with донор.zip]...
 //
-// Четыре файла: лимит 600 строк на файл (рамки, листы и -pull — во втором, макеты альбома 0.28 — в третьем,
-// лист образцов набора для каталога (спека 144) — в четвёртом, тот же package main; без третьего и четвёртого
-// скрипт собирается и для 0.26/0.27, макеты тогда не проверяются, а -sprite отказывает).
+// Пять файлов, лимит 600 строк на файл (тот же package main): рамки, листы, -pull — второй; макеты альбома 0.28 —
+// третий; лист образцов для каталога (спека 144) — четвёртый; темы наборов и типографии как из сети (спека 170) —
+// пятый. Без третьего–пятого скрипт собирается и для 0.26/0.27: макеты и темы не проверяются, а -sprite отказывает.
 //
 // Версия программы для minApp: -app x.y.z, иначе info.productVersion из wails.json (в текущей папке
 // или выше — дерево сборки); minApp набора новее — провал. Набор для 0.27.0 в дереве, где wails.json
 // ещё 0.26.0, проверяется с -app 0.27.0.
 //
-// Пути — абсолютные (paths.CheckLocalPath). Наборы ставятся по порядку в одну пустую библиотеку
-// (-tmp, по умолчанию $GOTMPDIR или .gotmp): на машине с наборами checkTplLibs слеп. -with — набор-
-// донор для дополнения (ставится первым, сам не проверяется). Проверка набора:
+// Пути — абсолютные (paths.CheckLocalPath). Наборы ставятся по порядку в одну пустую библиотеку (-tmp, по
+// умолчанию $GOTMPDIR или .gotmp) как набор из каталога (OriginNet), с проверкой типографий, как App: на машине с
+// наборами checkTplLibs слеп. -with — набор-донор для дополнения (ставится первым, сам не проверяется). Проверка набора:
 //   - Skipped и Ask пусты, окна рамок найдены;
-//   - шаблон: ключей библиотеки нет 0, LowDPI 0, слои не потеряны, места и стикеры целиком внутри
-//     области листа (-tol мм на округление);
-//   - пропорция мест на 30×30: меньше 80 % мест, где кадр 3:2 / 2:3 режется ≤ 15 %, — WARN в итоге
-//     (имя шаблона и доля), не провал, код выхода прежний; места-фигуры не считаются;
-//   - макет альбома (вид album, library-verify-looks.go): missing 0, LowDPI 0, места внутри области на
-//     20×30, 30×30 и 40×30; WARN, если в шаге меньше 80 % мест 3:2 / 2:3 на эталоне Ratio шага;
-//   - рамка: окно прозрачно, рамка вровень с краем места 20×20, 20×30, 30×20 см; «тянется» % (design
-//     §2.1) выше 20 — флаг-подсказка для отбора, не провал.
+//   - шаблон: ключей библиотеки нет 0, LowDPI 0, слои не потеряны, места и стикеры целиком внутри области листа (-tol мм);
+//   - пропорция мест на 30×30: меньше 80 % мест, где кадр 3:2 / 2:3 режется ≤ 15 %, — WARN в итоге (имя шаблона и
+//     доля), не провал; места-фигуры не считаются;
+//   - макет альбома (вид album, library-verify-looks.go): missing 0, LowDPI 0, места внутри области на 20×30, 30×30 и
+//     40×30; WARN, если в шаге меньше 80 % мест 3:2 / 2:3 на эталоне Ratio шага;
+//   - рамка: окно прозрачно, рамка вровень с краем места 20×20, 20×30, 30×20 см; «тянется» % (design §2.1) выше 20 —
+//     флаг-подсказка для отбора, не провал;
+//   - темы (library-verify-themes.go, 170): объявление принято и в таблице, topic не сброшен в базу, предметы темы на
+//     месте; печатается «тема → бг / ст / рам / разв / макет».
 //
 // Провалы копятся и печатаются в конце (код 1), независимые блоки друг друга не прерывают. С -out:
 // frames.png (рамки на шахматке — по нему идёт отбор) и fail-*.png (шаблон на размере, где провал);
@@ -41,7 +42,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -123,6 +123,13 @@ var spriteUsage = func(sprite, pick, _ string, _ int) string {
 	}
 	return ""
 }
+
+// themesFill и themesCheck — темы наборов и типографии как из сети (library-verify-themes.go, спека 170): без этого
+// файла (сборка для 0.26/0.27) пусто. Fill — до StagePack, Check — после установки набора.
+var (
+	themesFill  = func(*verifier, *decor.PackManifest, pack.Manifest) {}
+	themesCheck = func(*verifier, string, decor.PackInfo) {}
+)
 
 // lookRows — строки листа превью для макетов набора: по строке на макет «Обложка, 1…N» (то же —
 // library-verify-looks.go).
@@ -258,51 +265,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-var semver = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
-
-// appVersion — версия программы для сверки minApp: явный -app либо info.productVersion из ближайшего
-// wails.json (текущая папка и выше). Пусто и «dev» не годятся: тогда minApp не сверялся бы вовсе.
-func appVersion(flagVal string) (string, error) {
-	if flagVal != "" {
-		if !semver.MatchString(flagVal) {
-			return "", fmt.Errorf("-app %q: нужна версия x.y.z", flagVal)
-		}
-		return flagVal, nil
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		data, err := os.ReadFile(filepath.Join(dir, "wails.json"))
-		if err == nil {
-			var w struct {
-				Info struct {
-					ProductVersion string `json:"productVersion"`
-				} `json:"info"`
-			}
-			if json.Unmarshal(data, &w) != nil || !semver.MatchString(w.Info.ProductVersion) {
-				return "", fmt.Errorf("%s: нет info.productVersion вида x.y.z; укажите -app", filepath.Join(dir, "wails.json"))
-			}
-			return w.Info.ProductVersion, nil
-		}
-		up := filepath.Dir(dir)
-		if up == dir {
-			return "", errors.New("нет wails.json в текущей папке и выше: запускайте из корня дерева или укажите -app x.y.z")
-		}
-		dir = up
-	}
-}
-
-func cmpOr(vals ...string) string {
-	for _, s := range vals {
-		if s != "" {
-			return s
-		}
-	}
-	return ""
-}
-
 // install открывает архив и ставит набор в библиотеку; провалы пишет в v. false — не поставлен.
 func (v *verifier) install(path string) (decor.PackInfo, bool) {
 	f, _, err := library.OpenLocal(path)
@@ -331,7 +293,8 @@ func (v *verifier) install(path string) (decor.PackInfo, bool) {
 	for i, it := range m.Items {
 		dm.Items[i] = decor.PackItem{File: it.File, Kind: it.Kind, Theme: it.Theme, Name: it.Name, Size: it.Size}
 	}
-	st, err := v.s.StagePack(dm, arc, decor.OriginFile, arc.SHA256)
+	themesFill(v, &dm, m)
+	st, err := v.s.StagePack(dm, arc, decor.OriginNet, arc.SHA256) // как из каталога: темы и типографии принимаются
 	if st != nil {
 		defer st.Close()
 		for _, sk := range st.Skipped {
@@ -398,6 +361,7 @@ func (v *verifier) verifyPack(path string) {
 		v.guard("шаблон", func() { v.checkTpl(it) })
 	}
 	v.ctx = filepath.Base(path)
+	v.guard("темы", func() { themesCheck(v, path, info) })
 	v.guard("рамки", func() { v.checkFrames(info) })
 	if lookCheck != nil {
 		v.guard("макеты", func() { lookCheck(v, path, info) })

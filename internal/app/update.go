@@ -62,10 +62,11 @@ func (a *App) updHost() updater.Host {
 			src, auto := update.Default()
 			return update.New(src), auto
 		},
-		GOOS:  func() string { return runtime.GOOS },
-		Exe:   os.Executable,
-		Dir:   func() string { return update.Dir(a.data) },
-		Free:  osx.FreeBytes,
-		Start: update.Start,
+		GOOS:      func() string { return runtime.GOOS },
+		OSVersion: osx.OSVersion,
+		Exe:       os.Executable,
+		Dir:       func() string { return update.Dir(a.data) },
+		Free:      osx.FreeBytes,
+		Start:     update.Start,
 	}
 }

@@ -84,14 +84,27 @@ func manifestVerdict(data []byte, app string) map[string]any {
 	}
 	items := make([]any, 0, len(m.Items))
 	for _, it := range m.Items {
-		items = append(items, map[string]any{"file": it.File, "kind": it.Kind, "theme": it.Theme, "name": it.Name, "size": it.Size})
+		row := map[string]any{"file": it.File, "kind": it.Kind, "theme": it.Theme, "name": it.Name, "size": it.Size}
+		if it.Topic != "" { // только непустой: ожидания старых случаев с целым списком предметов не меняются
+			row["topic"] = it.Topic
+		}
+		items = append(items, row)
+	}
+	themes := make([]any, 0, len(m.Themes))
+	for _, th := range m.Themes {
+		themes = append(themes, map[string]any{"id": th.ID, "name": th.Name, "base": th.Base, "order": th.Order})
+	}
+	why := make([]any, 0, len(m.ThemeSkips.Why))
+	for _, w := range m.ThemeSkips.Why {
+		why = append(why, w)
 	}
 	skipped := make([]any, 0, len(m.Skipped))
 	for _, s := range m.Skipped {
 		skipped = append(skipped, map[string]any{"file": s.File, "why": s.Why})
 	}
 	return map[string]any{"ok": true, "code": "", "error": "", "title": m.Title, "about": m.About, "author": m.Author,
-		"license": m.License, "source": m.Source, "items": items, "skipped": skipped}
+		"license": m.License, "source": m.Source, "items": items, "skipped": skipped,
+		"themes": themes, "themeSkips": why, "themeSkipN": m.ThemeSkips.N}
 }
 
 func TestManifestCases(t *testing.T) {

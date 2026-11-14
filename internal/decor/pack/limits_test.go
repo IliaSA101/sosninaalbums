@@ -26,6 +26,14 @@ type limitsFile struct {
 	TplV         int64            `json:"tplV"`
 	LookV        int64            `json:"lookV"`
 	MaxLookSteps int64            `json:"maxLookSteps"`
+	// темы наборов (170): themes.go
+	MaxThemes     int64 `json:"maxThemes"`
+	MaxThemesRaw  int64 `json:"maxThemesRaw"`
+	MaxThemeName  int64 `json:"maxThemeName"`
+	MaxPackThemes int64 `json:"maxPackThemes"`
+	ThemeOrderMin int64 `json:"themeOrderMin"`
+	ThemeOrderMax int64 `json:"themeOrderMax"`
+	ThemeOrderDef int64 `json:"themeOrderDef"`
 }
 
 // loadLimits читает блок limits; неизвестное поле — ошибка (новый предел не должен остаться без сверки).
@@ -57,6 +65,9 @@ func TestLimits(t *testing.T) {
 		"format": {l.Format, Format}, "maxZip": {l.MaxZip, MaxZip}, "maxEntries": {l.MaxEntries, MaxEntries},
 		"maxManifest": {l.MaxManifest, MaxManifest}, "maxItems": {l.MaxItems, MaxItems}, "maxTotal": {l.MaxTotal, MaxTotal},
 		"maxDir": {l.MaxDir, maxDir}, "tailLen": {l.TailLen, tailLen}, "maxRatio": {l.MaxRatio, maxRatio}, "slack": {l.Slack, slack},
+		"maxThemes": {l.MaxThemes, MaxThemes}, "maxThemesRaw": {l.MaxThemesRaw, MaxThemesRaw}, "maxThemeName": {l.MaxThemeName, MaxThemeName},
+		"maxPackThemes": {l.MaxPackThemes, MaxPackThemes}, "themeOrderMin": {l.ThemeOrderMin, ThemeOrderMin},
+		"themeOrderMax": {l.ThemeOrderMax, ThemeOrderMax}, "themeOrderDef": {l.ThemeOrderDef, ThemeOrderDef},
 	}
 	for k, v := range want {
 		if v[0] != v[1] {

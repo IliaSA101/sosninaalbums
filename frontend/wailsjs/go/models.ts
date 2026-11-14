@@ -2154,6 +2154,10 @@ export namespace app {
 	    checked: number;
 	    just: string;
 	    failed: string;
+	    os: string;
+	    osNeed: string;
+	    blocked: string;
+	    last: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
@@ -2173,6 +2177,10 @@ export namespace app {
 	        this.checked = source["checked"];
 	        this.just = source["just"];
 	        this.failed = source["failed"];
+	        this.os = source["os"];
+	        this.osNeed = source["osNeed"];
+	        this.blocked = source["blocked"];
+	        this.last = source["last"];
 	    }
 	}
 

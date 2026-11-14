@@ -130,6 +130,7 @@ type updRig struct {
 
 	// Подмены, которые тест меняет по ходу; Host читает их при каждом вызове.
 	version, goos, dir string
+	osver              func() (string, bool) // сырая версия ОС; по умолчанию не определилась
 	exe                func() (string, error)
 	free               func(dir string) (uint64, error)
 	start              func(setup, cmdline string) error
@@ -147,6 +148,7 @@ func newUpdApp(t *testing.T) *updRig {
 		t.Fatal(err)
 	}
 	r.version, r.goos = "0.25.0", "windows"
+	r.osver = func() (string, bool) { return "", false }
 	r.exe = func() (string, error) { return filepath.Join(r.exeDir, "SosninaAlbums.exe"), nil }
 	r.dir = filepath.Join(testkit.TempDir(t), "Updates")
 	r.free = func(string) (uint64, error) { return 1 << 40, nil }
@@ -161,6 +163,7 @@ func (r *updRig) host(h updater.Host) updater.Host {
 	h.Client = func() (*update.Client, bool) { return update.New(r.f.src), r.auto }
 	h.Version = func() string { return r.version }
 	h.GOOS = func() string { return r.goos }
+	h.OSVersion = func() (string, bool) { return r.osver() }
 	h.Exe = func() (string, error) { return r.exe() }
 	h.Dir = func() string { return r.dir }
 	h.Free = func(d string) (uint64, error) { return r.free(d) }

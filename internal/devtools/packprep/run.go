@@ -142,6 +142,9 @@ func (r *runner) finish() error {
 	markSimilar(r.outs)
 	markForm(r.outs)
 	r.rep.budget()
+	for _, id := range r.rec.unusedThemes(r.outs) {
+		r.rep.fail("тема %q объявлена, но в наборе нет ни одного её предмета (skip убрал все?)", id)
+	}
 	r.rep.collect()
 	if len(r.outs) == 0 {
 		r.rep.fail("в наборе нет ни одного предмета")

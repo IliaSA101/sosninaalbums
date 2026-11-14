@@ -69,6 +69,11 @@ type Manifest struct {
 	Source  string `json:"source"` // текст, не ссылка (решение 14)
 	Items   []Item `json:"items"`
 	Skipped []Skip `json:"-"`
+	// ThemesRaw — сырое `themes` (RawMessage: чужой тип поля не роняет разбор набора, который
+	// принимают 0.29–0.39); после разбора обнуляется, итог — Themes и ThemeSkips (themes.go).
+	ThemesRaw  json.RawMessage `json:"themes"`
+	Themes     []Theme         `json:"-"`
+	ThemeSkips ThemeSkips      `json:"-"`
 }
 
 // Item — предмет набора: имя записи архива, вид, тема, имя для показа, sha256 и размер байтов.
@@ -79,6 +84,10 @@ type Item struct {
 	Name   string `json:"name"`
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
+	// TopicRaw — сырое `topic`; итог — Topic: id темы из объявлений этого манифеста или встроенная
+	// тема, иначе "" (предмет в базе `theme`). Не строка поле не роняет.
+	TopicRaw json.RawMessage `json:"topic"`
+	Topic    string          `json:"-"`
 }
 
 // Skip — предмет, который не ставится, и причина для тоста.
@@ -105,6 +114,8 @@ func ParseManifest(data []byte, app string) (Manifest, error) {
 	if len(m.Items) == 0 || len(m.Items) > MaxItems {
 		return Manifest{}, fmt.Errorf("%w: предметов должно быть от 1 до %d", ErrManifest, MaxItems)
 	}
+	m.Themes, m.ThemeSkips = ParseThemes(m.ThemesRaw)
+	m.ThemesRaw = nil
 	items := m.Items
 	m.Items = make([]Item, 0, len(items))
 	seen := make(map[string]bool, len(items))
@@ -132,6 +143,7 @@ func ParseManifest(data []byte, app string) (Manifest, error) {
 			it.Theme = "basic" // тему знает decor: незнакомую он тоже сводит к «Универсальным»
 		}
 		it.Name = Clean(it.Name, 60)
+		it.Topic, it.TopicRaw = topicOf(it.TopicRaw, m.Themes), nil
 		m.Items = append(m.Items, it)
 	}
 	if len(m.Items) == 0 {

@@ -58,6 +58,12 @@ type Entry struct {
 	PreviewRaw json.RawMessage `json:"preview,omitempty"`
 	// Preview — лист образцов набора (144); nil — нет поля или оно негодно (Skipped).
 	Preview *Preview `json:"-"`
+	// ThemesRaw — поле themes (объявления тем набора, 170) как пришло: тип не роняет каталог; после
+	// разбора обнуляется.
+	ThemesRaw json.RawMessage `json:"themes,omitempty"`
+	// Themes — число объявлений тем (0…16): по нему план перекачки набора, поставленного до 0.40
+	// (170-9). Имена и базы из строки клиент не берёт.
+	Themes int `json:"-"`
 }
 
 // Counts — сколько предметов каждого вида (для строки окна до скачивания).
@@ -167,6 +173,7 @@ func ParseCatalog(data []byte, src Source) (Catalog, error) {
 			cat.Skipped = append(cat.Skipped, Skip{ID: e.ID, Why: pwhy})
 		}
 		e.PreviewRaw = nil
+		e.Themes, e.ThemesRaw = themesCount(e.ThemesRaw), nil
 		cat.Packs = append(cat.Packs, e)
 	}
 	cat.Skipped = append(cat.Skipped, vskip...)

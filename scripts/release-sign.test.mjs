@@ -3,7 +3,8 @@
 //
 // Фикстура internal/update/testdata/ — конверты, которые читает Go (TestManifestFixture):
 //   update.json          верный конверт {"sig","body"}; update.pub — открытый ключ (base64, 32 байта);
-//   body.json            внутренний JSON (то, что подписано), для сверки разбора;
+//   body.json            внутренний JSON (то, что подписано), для сверки разбора; с minOS.darwin 12.0, как у 0.40.0;
+//   body-old.json        тот же выпуск без minOS — тело программ до 0.40 (TestParseOldBody);
 //   update-tampered.json тот же sig, но в body изменён один знак — подпись не сходится;
 //   update-otherkey.json подписан другим ключом — update.pub его не принимает.
 // Ключи воспроизводимы: seed = sha256("sosninaalbums-update-test-key") и sha256("sosninaalbums-update-other-key"),
@@ -20,7 +21,13 @@ import { publicRaw, verifyBytes } from './library-pack.mjs'
 import {
   ASSET,
   SignError,
+  argAll,
+  buildLadder,
+  ladderTags,
+  macMin,
   parseBmpMtime,
+  parseOsFlags,
+  releaseFields,
   buildBody,
   checkDraftAssets,
   cleanNote,
@@ -54,7 +61,7 @@ const body = (over = {}) => buildBody({ version: '0.25.1', date: '2026-11-02', m
 // ---- фикстура Go + node ----
 
 function fixtureFiles() {
-  const b = body()
+  const b = body({ minOS: { darwin: '12.0' } }) // как выйдет из release-sign для 0.40.0 (design §10)
   const env = sealEnvelope(b, KEY)
   const bytes = Buffer.from(JSON.stringify(b))
   const tampered = Buffer.from(bytes)
@@ -63,6 +70,7 @@ function fixtureFiles() {
     'update.json': JSON.stringify(env) + '\n',
     'update.pub': publicRaw(KEY) + '\n',
     'body.json': bytes.toString('utf8') + '\n',
+    'body-old.json': JSON.stringify(body()) + '\n',
     'update-tampered.json': JSON.stringify({ sig: env.sig, body: tampered.toString('base64') }) + '\n',
     'update-otherkey.json': JSON.stringify(sealEnvelope(b, OTHER)) + '\n',
   }
@@ -257,7 +265,23 @@ const TAG = 'v0.25.1'
 const WHATSNEW = `export const WHATS_NEW_VERSION = '0.25.1'\nexport const WHATS_NEW: readonly string[] = [\n  'раз',\n  'два',\n]\n`
 
 /** Макет: ключ, keys.go, черновик (gh отдаёт файлы), журнал вызовов. over: правки черновика. */
+const GOMOD = (v = '1.26.11') => `module x\n\ngo 1.26.0\n\ntoolchain go${v}\n`
+const PLIST = (v = '12.0') => `<dict>\n<key>CFBundleName</key>\n<string>x</string>\n<key>LSMinimumSystemVersion</key>\n<string>${v}</string>\n</dict>\n`
+
+/** git для меток: tags — {метка: {go, plist}} (go — версия Go, plist — LSMinimumSystemVersion; по умолчанию 1.26.11 и 12.0), иначе у всех умолчания. */
+function gitFor(tags = {}, whatsnew = WHATSNEW, calls = []) {
+  return (args) => {
+    calls.push(['git', ...args])
+    if (args[0] === 'show' && args[1] === '-s') return '2026-11-02\n'
+    const m = /^(v[\d.]+):(.+)$/.exec(args[1] ?? '')
+    if (args[0] === 'show' && m?.[2] === 'go.mod') return GOMOD(tags[m[1]]?.go)
+    if (args[0] === 'show' && m?.[2] === 'build/darwin/Info.plist') return PLIST(tags[m[1]]?.plist)
+    return whatsnew
+  }
+}
+
 function release(over = {}) {
+  const ver = over.ver ?? '0.25.1'
   const dir = tmp()
   const keyPath = path.join(dir, 'key.pem')
   fs.writeFileSync(keyPath, KEY.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 })
@@ -265,19 +289,17 @@ function release(over = {}) {
   fs.writeFileSync(keysFile, `var k = []string{"${publicRaw(over.programKey ?? KEY)}"}\n`)
   const setup = over.setup ?? Buffer.alloc(2 << 20, 7)
   const calls = []
-  const draft = { [setupName(over.fileVersion ?? '0.25.1')]: setup }
-  if (over.sums !== null) draft['SHA256SUMS.txt'] = over.sums ?? `${sha(setup)}  ${setupName('0.25.1')}\n`
+  const draft = { [setupName(over.fileVersion ?? ver)]: setup }
+  if (over.sums !== null) draft['SHA256SUMS.txt'] = over.sums ?? `${sha(setup)}  ${setupName(ver)}\n`
   const deps = {
     gh: (args) => {
       calls.push(args)
       if (args[1] === 'view') return Buffer.from((over.assets ?? Object.keys(draft)).join('\n') + '\n') // ассеты черновика
+      if (args[1] === 'list') return Buffer.from(JSON.stringify(over.published ?? [])) // опубликованные выпуски
       if (args[1] === 'download') for (const [n, data] of Object.entries(draft)) fs.writeFileSync(path.join(args[args.indexOf('-D') + 1], n), data)
       return Buffer.alloc(0)
     },
-    git: (args) => {
-      calls.push(['git', ...args])
-      return args[0] === 'show' && args[1] === '-s' ? '2026-11-02\n' : (over.whatsnew ?? WHATSNEW)
-    },
+    git: gitFor(over.tags, over.whatsnew ?? WHATSNEW.replaceAll('0.25.1', ver), calls),
     // пересборка из метки: по умолчанию даёт те же байты, что черновик; over.rebuilt — иные
     rebuild: ({ tag, version, work }) => {
       calls.push(['rebuild', tag, version])
@@ -286,7 +308,7 @@ function release(over = {}) {
       return f
     },
   }
-  const opts = { tag: TAG, keyPath, dry: false, keysFile, work: path.join(dir, 'work'), ...over.opts }
+  const opts = { tag: `v${ver}`, keyPath, dry: false, keysFile, work: path.join(dir, 'work'), ...over.opts }
   return { opts, deps, calls, setup, dir }
 }
 
@@ -307,6 +329,9 @@ test('выпуск: скачивает, сверяет хеш, подписыв�
   assert.equal(parsed.date, '2026-11-02')
   assert.equal(parsed.minAuto, '0.25.0')
   assert.deepEqual(parsed.notes, ['раз', 'два'])
+  assert.deepEqual(parsed.minOS, { darwin: '12.0' }, 'minOS из плиста и тулчейна метки')
+  assert.ok(!('lastOn' in parsed), 'ниже 0.40 лестницу не строим')
+  assert.ok(!gh.some((c) => c[1] === 'list'), 'и список выпусков не читаем')
   assert.deepEqual(parsed.files['windows-x64-setup'], { name: setupName('0.25.1'), size: r.setup.length, sha256: sha(r.setup) })
 })
 
@@ -376,8 +401,17 @@ test('выпуск: QA-режим --from не загружает и не тре�
   fs.writeFileSync(path.join(r.dir, 'wn.ts'), WHATSNEW)
   const out = signRelease({ ...r.opts, from, skipRebuild: true, whatsnew: path.join(r.dir, 'wn.ts'), date: '2026-01-02' }, r.deps)
   assert.equal(out.uploaded, false)
-  assert.equal(r.calls.length, 0) // ни gh, ни git
-  assert.equal(openEnvelope(fs.readFileSync(out.file, 'utf8'), publicRaw(KEY)).date, '2026-01-02')
+  assert.equal(r.calls.length, 0) // ни gh, ни git: метки на стенде может не быть
+  const qa = openEnvelope(fs.readFileSync(out.file, 'utf8'), publicRaw(KEY))
+  assert.equal(qa.date, '2026-01-02')
+  assert.ok(!('minOS' in qa) && !('lastOn' in qa), '--from без флагов — тело без полей')
+  // с флагами — поля из флагов, метки по-прежнему не читаются
+  const withFlags = signRelease({ ...r.opts, from, skipRebuild: true, whatsnew: path.join(r.dir, 'wn.ts'), date: '2026-01-02', minOS: { darwin: '13.0' }, lastOn: { darwin: { '13.0': '0.25.0' } } }, r.deps)
+  const flagged = openEnvelope(fs.readFileSync(withFlags.file, 'utf8'), publicRaw(KEY))
+  assert.deepEqual([flagged.minOS, flagged.lastOn], [{ darwin: '13.0' }, { darwin: { '13.0': '0.25.0' } }])
+  assert.equal(r.calls.length, 0)
+  // lastOn без minOS, ступень не старше выпуска — отказ и в QA-режиме
+  throwsSign(() => signRelease({ ...r.opts, from, skipRebuild: true, whatsnew: path.join(r.dir, 'wn.ts'), date: '2026-01-02', lastOn: { darwin: { '13.0': '0.25.0' } } }, r.deps), /lastOn\.darwin без minOS\.darwin/)
   // и в папке без SHA256SUMS.txt — тот же отказ
   fs.rmSync(path.join(from, 'SHA256SUMS.txt'))
   throwsSign(() => signRelease({ ...r.opts, from, skipRebuild: true, whatsnew: path.join(r.dir, 'wn.ts'), date: '2026-01-02' }, r.deps), /нет SHA256SUMS\.txt/)
@@ -431,7 +465,7 @@ test('--skip-rebuild без --from — отказ (код 2): в настоящ�
 })
 
 test('QA-режим --from с --skip-rebuild пересборку не зовёт; без --skip-rebuild --from тоже пересобирает', () => {
-  const r = release()
+  const r = release({ programKey: OTHER })
   const from = path.join(r.dir, 'lenta')
   fs.mkdirSync(from)
   fs.writeFileSync(path.join(from, setupName('0.25.1')), r.setup)
@@ -442,6 +476,24 @@ test('QA-режим --from с --skip-rebuild пересборку не зовё�
   assert.ok(!r.calls.some((c) => c[0] === 'rebuild'))
   signRelease(qa, r.deps)
   assert.equal(r.calls.filter((c) => c[0] === 'rebuild').length, 1)
+})
+
+test('--from с ключом, зашитым в keys.go, — отказ с кодом 2 до всякой работы; с тестовым ключом — подписывает', () => {
+  // ключ подписи входит в список известных: QA-файл с выдуманной версией таким ключом не подписываем
+  const r = release()
+  const from = path.join(r.dir, 'lenta')
+  fs.mkdirSync(from)
+  fs.writeFileSync(path.join(from, setupName('0.25.1')), r.setup)
+  fs.writeFileSync(path.join(from, 'SHA256SUMS.txt'), `${sha(r.setup)}  ${setupName('0.25.1')}\n`)
+  const wn = path.join(r.dir, 'wn.ts')
+  fs.writeFileSync(wn, WHATSNEW)
+  const qa = { ...r.opts, from, skipRebuild: true, whatsnew: wn, date: '2026-01-02', minOS: { darwin: '99.0' } }
+  assert.throws(() => signRelease(qa, r.deps), (e) => e instanceof SignError && e.code === 2 && /тестовым ключом/.test(e.message))
+  assert.equal(r.calls.length, 0)
+  assert.ok(!fs.existsSync(path.join(r.dir, 'work', 'v0.25.1', ASSET)), 'файл не записан')
+  // тот же вызов с ключом, которого в списке нет, проходит
+  fs.writeFileSync(r.opts.keysFile, `var k = []string{"${publicRaw(OTHER)}"}\n`)
+  assert.equal(signRelease(qa, r.deps).uploaded, false)
 })
 
 test('--bmp-mtime: разбор (целое число, пусто — не задано, мусор — отказ с кодом 2) и передача в пересборку', () => {
@@ -471,4 +523,200 @@ test('--bmp-mtime: разбор (целое число, пусто — не за
     assert.equal(q.status, 2, tail.join(' '))
     assert.match(q.stderr, /не указано значение/)
   }
+})
+
+// ---- minOS и lastOn: метки, лестница, флаги (спека 171, design §7) ----
+
+/** Опубликованный выпуск в ответе `gh release list`. */
+const pub = (tag, over = {}) => ({ tagName: tag, isDraft: false, isPrerelease: false, ...over })
+
+test('macMin: максимум из плиста и порога Go метки; нет ключа в плисте — порог; минор не из таблицы и нет метки — отказ', () => {
+  const m = (go, plist) => macMin('v0.50.0', gitFor({ 'v0.50.0': { go, plist } }))
+  assert.equal(m('1.26.11', '10.13.0'), '12.0') // плист старый — порог Go
+  assert.equal(m('1.26.11', '14.0'), '14.0') // плист выше порога
+  assert.equal(m('1.26.11', '12.0'), '12.0') // равны
+  assert.equal(m('1.27.4', '12.0'), '13.0') // Go 1.27 — macOS 13
+  assert.equal(m('1.24.1', '10.13.0'), '11.0')
+  assert.equal(macMin('v0.50.0', (a) => (a[1].endsWith('go.mod') ? GOMOD() : '<dict></dict>')), '12.0', 'в плисте нет LSMinimumSystemVersion')
+  assert.equal(macMin('v0.50.0', (a) => (a[1].endsWith('go.mod') ? 'module x\n\ngo 1.25.0\n' : PLIST('10.13.0'))), '12.0', 'без toolchain — директива go')
+  throwsSign(() => m('1.30.0', '12.0'), /v0\.50\.0: нет порога macOS для go1\.30.*MAC_FLOOR/)
+  throwsSign(() => macMin('v0.50.0', (a) => (a[1].endsWith('go.mod') ? 'module x\n' : PLIST())), /нет строки toolchain и go/)
+  throwsSign(() => m('1.26.11', 'abc'), /не версия системы/)
+  throwsSign(() => macMin('v9.9.9', () => { throw new SignError('git show: не удалось') }), /v9\.9\.9:go\.mod не прочитан.*git fetch --tags/)
+})
+
+test('лестница: две ступени по меткам, порядок ключей от высокого порога к низкому', () => {
+  const tags = {
+    'v0.47.0': { plist: '14.0' },
+    'v0.46.0': { plist: '13.0' },
+    'v0.45.0': { plist: '13.0' },
+    'v0.42.0': { plist: '12.0' },
+    'v0.40.0': { plist: '10.13.0' },
+    'v0.50.0': { plist: '14.0' },
+  }
+  const published = ['v0.47.0', 'v0.46.0', 'v0.45.0', 'v0.42.0', 'v0.40.0'].map((t) => pub(t))
+  const f = releaseFields('v0.50.0', '0.50.0', { git: gitFor(tags), gh: () => Buffer.from(JSON.stringify(published)) })
+  assert.deepEqual(f, { minOS: { darwin: '14.0' }, lastOn: { darwin: { '14.0': '0.46.0', '13.0': '0.42.0' } } })
+  assert.deepEqual(Object.keys(f.lastOn.darwin), ['14.0', '13.0'])
+  // Mac 12 (ниже 13.0) получит 0.42.0, Mac 13 (ниже 14.0) — 0.46.0: самая новая метка своей группы минимумов;
+  // 0.47.0 (минимум как у текущей) и 0.45.0 (как у 0.46.0) своих ступеней не дают, 0.40.0 (10.13.0 → порог Go 12.0) — тоже
+  assert.equal(Object.keys(f.lastOn.darwin).length, 2)
+})
+
+test('0.40: все метки с минимумом 12.0 — minOS 12.0 без lastOn (как в design §7)', () => {
+  const published = ['v0.40.0', 'v0.39.0', 'v0.25.0'].map((t) => pub(t))
+  const f = releaseFields('v0.40.1', '0.40.1', { git: gitFor({ 'v0.40.1': { plist: '12.0' }, 'v0.40.0': { plist: '10.13.0' } }), gh: () => JSON.stringify(published) })
+  assert.deepEqual(f, { minOS: { darwin: '12.0' } })
+})
+
+test('метки для ступеней: черновик, prerelease, имя не по TAG_RE, ниже 0.40.0 и не старше текущей — пропуск', () => {
+  const list = [
+    pub('v0.49.0'),
+    pub('v0.48.0', { isDraft: true }),
+    pub('v0.47.0', { isPrerelease: true }),
+    pub('v0.46.0-rc1'),
+    pub('0.45.0'),
+    pub('v0.44.0 '),
+    pub('v0.43.0', { isDraft: undefined }), // нет признака — не опубликован
+    pub('v0.39.0'),
+    pub('v0.50.0'), // сама текущая
+    pub('v0.51.0'), // новее текущей
+    pub('v0.40.0'),
+    pub('v0.41.0'),
+    pub('v0.41.0'), // дубль
+    null,
+    'v0.42.0',
+    { tagName: 7 },
+  ]
+  assert.deepEqual(ladderTags(list, '0.50.0'), ['0.49.0', '0.41.0', '0.40.0'])
+  assert.deepEqual(ladderTags([], '0.50.0'), [])
+  // пропущенные метки не читаются из git вовсе (метки на черновик может не быть локально)
+  const read = []
+  const git = (a) => (read.push(a[1]), gitFor({ 'v0.50.0': { plist: '13.0' } })(a))
+  releaseFields('v0.50.0', '0.50.0', { git, gh: () => JSON.stringify(list) })
+  assert.deepEqual([...new Set(read.map((x) => x.split(':')[0]))].sort(), ['v0.40.0', 'v0.41.0', 'v0.49.0', 'v0.50.0'])
+})
+
+test('лестница: 8 ступеней — можно, 9 — отказ с подсказкой про format 2', () => {
+  const steps = (n) => {
+    const tags = []
+    for (let i = 0; i < n; i++) tags.push({ version: `0.${49 - i}.0`, min: `${29 - i}.0` })
+    return tags
+  }
+  assert.equal(Object.keys(buildLadder('30.0', steps(8))).length, 8)
+  throwsSign(() => buildLadder('30.0', steps(9)), /ступеней lastOn 9, больше 8.*format 2/)
+  // метка с минимумом не ниже порога ступени не даёт
+  assert.deepEqual(buildLadder('13.0', [{ version: '0.49.0', min: '13.0' }, { version: '0.48.0', min: '14.0' }]), {})
+  // порог «13» и «13.0» — одно число
+  assert.deepEqual(buildLadder('13.0', [{ version: '0.49.0', min: '13' }]), {})
+  // и интеграция: настоящая подпись, девять ступеней — отказ до пересборки и загрузки
+  const tags = { 'v0.60.0': { plist: '30.0' } }
+  const published = []
+  for (let i = 0; i < 9; i++) {
+    tags[`v0.${49 - i}.0`] = { plist: `${29 - i}.0` }
+    published.push(pub(`v0.${49 - i}.0`))
+  }
+  const r = release({ ver: '0.60.0', tags, published })
+  throwsSign(() => signRelease(r.opts, r.deps), /ступеней lastOn 9/)
+  assert.ok(!r.calls.some((c) => c[0] === 'rebuild' || c[1] === 'upload'))
+})
+
+test('выпуск целиком: minOS и lastOn из меток попадают в подписанное тело', () => {
+  const r = release({
+    ver: '0.41.0',
+    tags: { 'v0.41.0': { plist: '13.0' }, 'v0.40.0': { plist: '10.13.0' } },
+    published: [pub('v0.40.0'), pub('v0.41.0', { isDraft: true })],
+  })
+  const out = signRelease(r.opts, r.deps)
+  const body = openEnvelope(fs.readFileSync(out.file, 'utf8'), publicRaw(KEY))
+  assert.deepEqual([body.minOS, body.lastOn], [{ darwin: '13.0' }, { darwin: { '13.0': '0.40.0' } }])
+  assert.deepEqual(Object.keys(body).slice(-2), ['minOS', 'lastOn'])
+  assert.ok(r.calls.some((c) => c[1] === 'list' && c.includes('tagName,isDraft,isPrerelease')))
+  // метки нет локально (git show упал) — отказ до пересборки, подсказка про fetch
+  const g = release({ ver: '0.41.0', published: [pub('v0.40.0')] })
+  g.deps.git = (a) => {
+    if (a[1] === 'v0.40.0:go.mod') throw new SignError('git show v0.40.0:go.mod: не удалось')
+    return gitFor({})(a)
+  }
+  throwsSign(() => signRelease(g.opts, g.deps), /v0\.40\.0:go\.mod не прочитан.*git fetch --tags/)
+  assert.ok(!g.calls.some((c) => c[0] === 'rebuild' || c[1] === 'upload'))
+})
+
+test('выпуск: gh release list не JSON и не список — отказ', () => {
+  for (const out of ['не json', '{"a":1}']) {
+    const r = release({ ver: '0.41.0' })
+    const gh = r.deps.gh
+    r.deps.gh = (a) => (a[1] === 'list' ? Buffer.from(out) : gh(a))
+    throwsSign(() => signRelease(r.opts, r.deps), /gh release list/)
+  }
+})
+
+test('флаги --min-os и --last-on без --from — отказ с кодом 2, ничего не сделано', () => {
+  for (const extra of [{ minOS: { darwin: '13.0' } }, { lastOn: { darwin: { '13.0': '0.41.0' } } }]) {
+    const r = release({ opts: extra })
+    assert.throws(() => signRelease(r.opts, r.deps), (e) => e instanceof SignError && e.code === 2 && /только вместе с --from/.test(e.message))
+    assert.equal(r.calls.length, 0)
+  }
+  const run = (...a) => spawnSync(process.execPath, [path.join(REPO, 'scripts', 'release-sign.mjs'), ...a], { encoding: 'utf8' })
+  for (const flags of [['--min-os', 'darwin=13.0'], ['--last-on', 'darwin:13.0=0.41.0']]) {
+    const p = run(TAG, '--dry', ...flags)
+    assert.equal(p.status, 2, p.stderr)
+    assert.match(p.stderr, /только вместе с --from/)
+  }
+  // разбор флагов в CLI: неверный вид и флаг без значения — код 2
+  for (const bad of [['--min-os', 'darwin'], ['--last-on', 'darwin=0.41.0'], ['--min-os'], ['--last-on', '--dry']]) {
+    const p = run(TAG, ...bad)
+    assert.equal(p.status, 2, bad.join(' '))
+  }
+})
+
+test('parseOsFlags и argAll: повторяемые флаги; неверный вид, повтор, имена-прототипы — отказ с кодом 2', () => {
+  assert.deepEqual(parseOsFlags([], []), { minOS: undefined, lastOn: undefined })
+  assert.deepEqual(parseOsFlags(['darwin=14.0', 'windows=10.0.22000'], ['darwin:14.0=0.47.0', 'darwin:13.0=0.42.0']), {
+    minOS: { darwin: '14.0', windows: '10.0.22000' },
+    lastOn: { darwin: { '14.0': '0.47.0', '13.0': '0.42.0' } },
+  })
+  const code2 = (fn) => assert.throws(fn, (e) => e instanceof SignError && e.code === 2)
+  code2(() => parseOsFlags(['darwin'], []))
+  code2(() => parseOsFlags(['darwin=13.0', 'darwin=14.0'], []))
+  code2(() => parseOsFlags([], ['darwin:13.0']))
+  code2(() => parseOsFlags([], ['darwin:13.0=0.41.0', 'darwin:13.0=0.42.0']))
+  code2(() => parseOsFlags(['Darwin=13.0'], []))
+  // constructor/__proto__ — не «уже заданные» ключи и не портят объект: доходят до buildBody и там отклоняются как неизвестная ОС
+  const f = parseOsFlags(['constructor=13.0'], ['constructor:13.0=0.1.0'])
+  throwsSign(() => body({ ...f }), /неизвестная ОС «constructor»/)
+  assert.deepEqual(argAll(['v1', '--a', 'x', '--b', '--a', 'y'], '--a'), ['x', 'y'])
+  assert.deepEqual(argAll(['v1'], '--a'), [])
+  code2(() => argAll(['--a'], '--a'))
+  code2(() => argAll(['--a', '--b'], '--a'))
+})
+
+test('buildBody: неверные minOS и lastOn — отказ; верные — поля в конце тела', () => {
+  const ok = body({ minOS: { darwin: '14.0', windows: '10.0.22000' }, lastOn: { darwin: { '14.0': '0.25.0', '13.0': '0.24.0' } } })
+  assert.deepEqual(Object.keys(ok).slice(-2), ['minOS', 'lastOn'])
+  assert.deepEqual(Object.keys(body()), ['format', 'app', 'version', 'date', 'minAuto', 'notes', 'files'], 'без полей — тело прежнее')
+  assert.deepEqual(Object.keys(body({ minOS: {} })).slice(-1), ['minOS']) // {} допустим: правил нет
+  for (const v of ['13.0', '13', '1.2.3', '999999.999999.999999']) assert.deepEqual(body({ minOS: { darwin: v } }).minOS, { darwin: v })
+  for (const bad of ['', '13.', '.0', '1.2.3.4', '13.0-beta', 'abc', ' 13.0', '1234567.0']) throwsSign(() => body({ minOS: { darwin: bad } }), /ждали версию системы/)
+  for (const bad of [13, null, ['13.0']]) throwsSign(() => body({ minOS: { darwin: bad } }), /ждали версию системы/)
+  for (const bad of ['13.0', null, ['darwin'], 7]) throwsSign(() => body({ minOS: bad }), /minOS — объект/)
+  throwsSign(() => body({ minOS: { Darwin: '13.0' } }), /неизвестная ОС «Darwin»/)
+  const ladder = (steps, minOS = { darwin: '14.0' }) => body({ minOS, lastOn: { darwin: steps } })
+  throwsSign(() => body({ lastOn: { darwin: { '13.0': '0.24.0' } } }), /lastOn\.darwin без minOS\.darwin/)
+  throwsSign(() => body({ minOS: { darwin: '14.0' }, lastOn: { windows: { '13.0': '0.24.0' } } }), /lastOn\.windows без minOS\.windows/)
+  throwsSign(() => body({ minOS: { darwin: '14.0' }, lastOn: '0.24.0' }), /lastOn — объект/)
+  throwsSign(() => ladder({}), /непустой объект/)
+  throwsSign(() => ladder('0.24.0'), /непустой объект/)
+  throwsSign(() => ladder({ '13.0': 'abc' }), /ждали X\.Y\.Z/)
+  throwsSign(() => ladder({ '13.0': 7 }), /ждали X\.Y\.Z/)
+  throwsSign(() => ladder({ x: '0.24.0' }), /порог «x»/)
+  throwsSign(() => ladder({ '15.0': '0.24.0' }), /порог 15\.0 выше minOS\.darwin 14\.0/)
+  assert.deepEqual(ladder({ '14.0': '0.24.0' }).lastOn, { darwin: { '14.0': '0.24.0' } }) // порог = minOS — можно
+  throwsSign(() => ladder({ '13.0': '0.25.1' }), /не старше выпуска 0\.25\.1/)
+  throwsSign(() => ladder({ '13.0': '0.26.0' }), /не старше выпуска/)
+  throwsSign(() => ladder({ '14.0': '0.20.0', '13.0': '0.24.0' }), /чем выше порог, тем не старше/)
+  throwsSign(() => ladder({ '13': '0.20.0', '13.0': '0.20.0' }), /повторён/)
+  const nine = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`${5 + i}.0`, `0.${i}.0`]))
+  throwsSign(() => ladder(nine, { darwin: '20.0' }), /9 ступеней, больше 8.*format 2/)
+  assert.equal(Object.keys(ladder(Object.fromEntries(Object.entries(nine).slice(0, 8)), { darwin: '20.0' }).lastOn.darwin).length, 8)
 })

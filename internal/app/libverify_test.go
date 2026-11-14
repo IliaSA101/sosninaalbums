@@ -32,10 +32,10 @@ import (
 // lvTool — собранный скрипт.
 type lvTool struct{ exe string }
 
-// buildLibVerify собирает скрипт (четыре файла одного package main); без go или на лёгком уровне — пропуск.
+// buildLibVerify собирает скрипт (пять файлов одного package main); без go или на лёгком уровне — пропуск.
 func buildLibVerify(t *testing.T) lvTool {
 	t.Helper()
-	return buildLibVerifyOf(t, "library-verify.go", "library-verify-sheets.go", "library-verify-looks.go", "library-verify-sprite.go")
+	return buildLibVerifyOf(t, "library-verify.go", "library-verify-sheets.go", "library-verify-looks.go", "library-verify-sprite.go", "library-verify-themes.go")
 }
 
 // lvBuilt — собранные скрипты на пакет: go build идёт один раз на набор файлов, а не на каждый тест.

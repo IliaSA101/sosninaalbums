@@ -362,6 +362,10 @@ func (s *Service) netPlan(st *decor.Store, cat fetch.Catalog, pl plan, res *Upda
 		case ok && p.Origin == decor.OriginBuiltin:
 			// До сверки версий: встроенный — версия 1, строка версии 1 иначе пропала бы молча.
 			cs = append(cs, cand{e: e, why: whyBuiltin})
+		case ok && p.Version == e.Version && p.Origin == decor.OriginNet && !p.ThemesRead && e.Themes > 0 && !e.NeedsApp(app):
+			// Набор из 0.39 (реестр без tv), а строка объявляет темы: одна перекачка той же версии (170-9).
+			// Решение только здесь: StagePack и InstallPack его не пересматривают, tv пишется всегда (170-19).
+			cs = append(cs, cand{e: e, ok: true})
 		case ok && p.Version >= e.Version:
 			cs = append(cs, cand{e: e})
 		case ok && p.Origin != decor.OriginNet:

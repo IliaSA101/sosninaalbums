@@ -23,6 +23,7 @@ func TestUpdaterNewPanics(t *testing.T) {
 		StartTimes: func() (time.Duration, time.Duration) { return 0, 0 },
 		Client:     func() (*update.Client, bool) { return nil, false },
 		GOOS:       func() string { return "linux" },
+		OSVersion:  func() (string, bool) { return "", false },
 		Exe:        func() (string, error) { return "", nil },
 		Dir:        func() string { return "" },
 		Free:       func(string) (uint64, error) { return 0, nil },

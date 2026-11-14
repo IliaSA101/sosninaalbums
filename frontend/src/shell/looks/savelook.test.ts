@@ -78,6 +78,20 @@ describe('темы', () => {
     expect(themeItems({ themes: [{ id: 'mine', name: 'Мои', count: 0 }] }).map((x) => x.id)).toEqual(['mine'])
     expect(themeItems(null)).toEqual([{ id: 'mine', name: 'Мои' }])
   })
+  // 170 U1: тема набора — обычная строка; порядок Go сохранён, «Мои» дописана в конец, если Go её не дал
+  it('тема набора в списке сохранения — в порядке Go', () => {
+    const t = [
+      { id: 'all', name: 'Все', count: 3 },
+      { id: 'holiday', name: 'Праздник', count: 1 },
+      { id: 'newyear', name: 'Новый год', count: 2 },
+      { id: 'brand', name: 'Фирменные', count: 1 },
+    ]
+    expect(themeItems({ themes: t })).toEqual([
+      { id: 'holiday', name: 'Праздник' },
+      { id: 'newyear', name: 'Новый год' },
+      { id: 'mine', name: 'Мои' },
+    ])
+  })
 })
 
 describe('параметры SaveLook', () => {

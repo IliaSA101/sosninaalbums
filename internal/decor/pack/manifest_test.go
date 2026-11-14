@@ -3,6 +3,7 @@ package pack
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -198,6 +199,7 @@ func FuzzParseManifest(f *testing.F) {
 	f.Add(manifestJSON(f, nil), "0.16.0")
 	f.Add([]byte(`{"format":1,"id":"abc","version":1,"minApp":"0.0.1","title":"x","items":[{"file":"a.png","kind":"bg","sha256":"`+sumA+`","size":1}]}`), "dev")
 	f.Add([]byte(`{"format":1e9,"items":[null]}`), "")
+	f.Add(themedManifest(f, []any{decl("newyear", "Новый год", "holiday", 10)}, "newyear", []any{"x"}), "0.40.0")
 	f.Add([]byte(`{"format":1,"id":"abc","version":1,"minApp":"0.26.0","title":"x","items":[{"file":"fabrika.saprint","kind":"print","sha256":"`+sumA+`","size":65536}]}`), "0.26.0")
 	f.Fuzz(func(t *testing.T, data []byte, app string) {
 		m, err := ParseManifest(data, app)
@@ -213,6 +215,12 @@ func FuzzParseManifest(f *testing.F) {
 				t.Fatalf("плохой предмет %+v", it)
 			}
 			total += it.Size
+			if it.Topic != "" && !IsBuiltinTheme(it.Topic) && !slices.ContainsFunc(m.Themes, func(th Theme) bool { return th.ID == it.Topic }) {
+				t.Fatalf("topic %q не из объявлений", it.Topic)
+			}
+		}
+		if len(m.Themes) > MaxThemes {
+			t.Fatalf("тем %d", len(m.Themes))
 		}
 		if total > MaxTotal {
 			t.Fatalf("набор %d байт", total)

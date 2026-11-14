@@ -60,6 +60,12 @@ func keyOf(data []byte) string {
 // packZip — архив набора: стикеры ширины widths (по порядку); version/ minApp зафиксированы.
 func packZip(t *testing.T, id string, version int, widths ...int) []byte {
 	t.Helper()
+	return packZipThemes(t, id, version, nil, widths...)
+}
+
+// packZipThemes — packZip с полем themes манифеста (170): themes nil — поля нет.
+func packZipThemes(t *testing.T, id string, version int, themes any, widths ...int) []byte {
+	t.Helper()
 	files := map[string][]byte{}
 	items := []map[string]any{}
 	for _, w := range widths {
@@ -69,8 +75,12 @@ func packZip(t *testing.T, id string, version int, widths ...int) []byte {
 		items = append(items, map[string]any{"file": name, "kind": "sticker", "theme": "wedding", "name": "Стикер " + itoa(w),
 			"sha256": hex.EncodeToString(sum[:]), "size": len(data)})
 	}
-	man, err := json.Marshal(map[string]any{"format": 1, "id": id, "version": version, "minApp": "0.26.0",
-		"title": "Набор " + id, "license": "CC0-1.0", "items": items})
+	mm := map[string]any{"format": 1, "id": id, "version": version, "minApp": "0.26.0",
+		"title": "Набор " + id, "license": "CC0-1.0", "items": items}
+	if themes != nil {
+		mm["themes"] = themes
+	}
+	man, err := json.Marshal(mm)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,6 +208,7 @@ type row struct {
 	id, needs string
 	version   int
 	zip       []byte
+	themes    string // поле themes строки каталога (170), JSON-текст; "" — поля нет
 }
 
 func relOf(id string, v int) string { return id + "-v" + itoa(v) + "/" + id + "-" + itoa(v) + ".zip" }
@@ -214,6 +225,9 @@ func (d *demoSrv) publish(rows ...row) {
 			"sha256": hex.EncodeToString(sum[:]), "url": d.src.Prefix + relOf(r.id, r.version), "counts": map[string]int{"sticker": 1}}
 		if r.needs != "" {
 			e["needs"] = r.needs
+		}
+		if r.themes != "" {
+			e["themes"] = json.RawMessage(r.themes)
 		}
 		out = append(out, e)
 	}

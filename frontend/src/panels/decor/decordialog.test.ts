@@ -17,6 +17,7 @@ vi.mock('../../editor/text/fonts', () => ({ loadFonts: async () => {} }))
 vi.stubGlobal('window', globalThis)
 
 const { decor } = await import('./decor.svelte')
+const { themeItems } = await import('./decor')
 const { store } = await import('../../base/core/store.svelte')
 const { bgmode } = await import('../../editor/backdrop/bgmode.svelte')
 
@@ -177,6 +178,50 @@ describe('окно после установки набора (073-1)', () => {
       await vi.waitFor(() => expect(decor.loading).toBe(false))
     }
     decor.close()
+  })
+})
+
+describe('тема набора в окне (170 U1)', () => {
+  afterEach(() => {
+    decor.cat = null
+    decor.setTheme('')
+    decor.close()
+  })
+  const withTheme = () =>
+    catalog({
+      themes: [
+        { id: 'all', name: 'Все', count: 2 },
+        { id: 'holiday', name: 'Праздник', count: 1 },
+        { id: 'newyear', name: 'Новый год', count: 1 },
+        { id: 'mine', name: 'Мои', count: 0 },
+      ],
+      items: [
+        { id: 'sa:h', theme: 'holiday', name: 'Шар', url: '/a', own: false, aspect: 0, w: 0, h: 0 },
+        { id: 'pk:ny', theme: 'newyear', name: 'Ёлка', url: '/b', own: false, aspect: 0, w: 0, h: 0, pack: 'Новый год' },
+      ],
+      recent: [],
+    })
+
+  it('строка темы набора выбирается, плитки фильтруются; открытая тема переживает перечитывание каталога', async () => {
+    api.DecorCatalog.mockImplementation(async () => withTheme())
+    decor.show('bg', 's1', 'spread')
+    await vi.waitFor(() => expect(decor.loading).toBe(false))
+    expect(decor.theme).toBe('all') // «Недавних» нет — «Все»
+    decor.setTheme('newyear')
+    expect(themeItems(decor.cat, decor.theme).map((i) => i.id)).toEqual(['pk:ny'])
+    await decor.refresh()
+    expect(decor.theme).toBe('newyear')
+  })
+
+  it('набор убрали — тема исчезла из каталога, выбор уходит на «Недавние», окно не падает', async () => {
+    api.DecorCatalog.mockImplementation(async () => withTheme())
+    decor.show('bg', 's1', 'spread')
+    await vi.waitFor(() => expect(decor.loading).toBe(false))
+    decor.setTheme('newyear')
+    api.DecorCatalog.mockImplementation(async () => catalog())
+    await decor.refresh()
+    expect(themeItems(decor.cat, 'newyear')).toEqual([])
+    expect(decor.theme).toBe('recent') // как у любой исчезнувшей темы (firstSource)
   })
 })
 

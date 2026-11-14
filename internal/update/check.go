@@ -101,22 +101,32 @@ type Result struct {
 	Offer    *Offer
 	Seen     string
 	Rollback bool
+	// Blocked — версия, которой нужна система новее нашей (offer нет или это ступень lastOn);
+	// Need — минимум этой версии. Пусто — правило не сработало.
+	Blocked, Need string
+	// OSUnknown — у выпуска есть minOS для нашей ОС, а версия системы не определилась: правило не
+	// применено (171-3), служба пишет строку в log.txt.
+	OSUnknown bool
+	// Skipped — имена неверных полей чужой ОС из манифеста (Manifest.Skipped).
+	Skipped []string
 }
 
 // Check — проверка обновления: манифест выпуска (конверт ≤ 16 КБ, подпись до разбора) →
 // Parse → сравнение с cur. seen — наибольшая виденная ранее версия ("" — не было): файл
 // ниже неё — Rollback. Предлагается только строго более новая версия, чем cur (откат
-// запрещён); cur не версия (dev) — предложений нет.
-func Check(ctx context.Context, c *Client, cur, seen string) (Result, error) {
+// запрещён); cur не версия (dev) — предложений нет. sys — система: у выпуска minOS выше её версии —
+// предложения нет (Blocked), но если lastOn знает ступень новее cur — предлагается она, страницей.
+// Версия системы неизвестна — правило не применяется. Откат проверяется раньше блокировки.
+func Check(ctx context.Context, c *Client, cur, seen string, sys System) (Result, error) {
 	body, err := c.fc.Signed(ctx, c.src.CatalogURL, maxEnvelope)
 	if err != nil {
 		return Result{Seen: validOr(seen)}, humanize(err)
 	}
-	m, err := Parse(body)
+	m, err := Parse(body, sys.GOOS)
 	if err != nil {
 		return Result{Seen: validOr(seen)}, err
 	}
-	res := Result{Seen: validOr(seen)}
+	res := Result{Seen: validOr(seen), Skipped: m.Skipped}
 	if Newer(res.Seen, m.Version) {
 		res.Rollback = true
 		return res, nil
@@ -124,6 +134,18 @@ func Check(ctx context.Context, c *Client, cur, seen string) (Result, error) {
 	res.Seen = m.Version
 	if !Newer(m.Version, cur) {
 		return res, nil
+	}
+	if need := m.MinOS[sys.GOOS]; need != "" {
+		switch {
+		case !validOS(sys.Version):
+			res.OSUnknown = true
+		case OSLess(sys.Version, need):
+			res.Blocked, res.Need = m.Version, need
+			if last := stepFor(m.LastOn[sys.GOOS], sys.Version); last != "" && Newer(last, cur) {
+				res.Offer = &Offer{Version: last, Notes: []string{}, Page: true}
+			}
+			return res, nil
+		}
 	}
 	o := &Offer{Version: m.Version, Date: m.Date, Notes: m.Notes, Setup: m.Setup}
 	if o.Setup == nil || m.MinAuto != "" && Newer(m.MinAuto, cur) {

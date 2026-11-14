@@ -41,6 +41,8 @@ type Info struct {
 	Print     int    `json:"print"` // 123: профили типографий
 	Bytes     int64  `json:"bytes"`
 	Removable bool   `json:"removable"`
+	// ThemesRead — реестр писала программа с темами (decor.PackInfo.ThemesRead); в биндинги не идёт.
+	ThemesRead bool `json:"-"`
 }
 
 // Net — согласие на сеть и проверка при запуске (prefs.LibraryNet без списка удалённых: наружу —

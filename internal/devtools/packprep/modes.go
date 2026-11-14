@@ -284,6 +284,7 @@ func (r *runner) emit(idx int, it Item, p piece) error {
 	if o.Theme == "" {
 		o.Theme = r.rec.Theme
 	}
+	o.Theme, o.Topic = r.rec.resolveTheme(o.Theme) // объявленная тема: в theme — база, в topic — id
 	if kind != KindBg {
 		if f := CheckFringe(p.img); f.Flag {
 			o.Flags = append(o.Flags, fmt.Sprintf("кайма?: светлых px у контура %.0f %% против %.0f %% внутри", 100*f.RingLight, 100*f.CoreLight))

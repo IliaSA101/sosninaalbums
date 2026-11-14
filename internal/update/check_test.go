@@ -12,7 +12,7 @@ import (
 
 func checkOf(t *testing.T, f *feed, cur, seen string) (Result, error) {
 	t.Helper()
-	return Check(context.Background(), f.client(), cur, seen)
+	return Check(context.Background(), f.client(), cur, seen, System{})
 }
 
 // Новее текущей — предложение с установщиком и текстом; запрос один.
@@ -65,7 +65,7 @@ func TestCheckSignature(t *testing.T) {
 	g.serveRaw(envelope(otherPriv, body))
 	src := g.source()
 	src.Keys = []ed25519.PublicKey{g.pub, other}
-	res, err := Check(context.Background(), New(src), "0.25.0", "")
+	res, err := Check(context.Background(), New(src), "0.25.0", "", System{})
 	if err != nil || res.Offer == nil {
 		t.Errorf("запасной ключ: %v %+v", err, res)
 	}
@@ -81,7 +81,7 @@ func TestCheckSignature(t *testing.T) {
 	src = f.source()
 	src.Keys = nil
 	f.serveManifest(body)
-	if _, err := Check(context.Background(), New(src), "0.25.0", ""); !errors.Is(err, ErrVerify) {
+	if _, err := Check(context.Background(), New(src), "0.25.0", "", System{}); !errors.Is(err, ErrVerify) {
 		t.Errorf("без ключей: %v", err)
 	}
 }
@@ -149,7 +149,7 @@ func TestCheckErrors(t *testing.T) {
 	// Отмена не превращается в «не прошло проверку».
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := Check(ctx, f.client(), "0.25.0", ""); !errors.Is(err, ErrCancelled) {
+	if _, err := Check(ctx, f.client(), "0.25.0", "", System{}); !errors.Is(err, ErrCancelled) {
 		t.Errorf("отмена: %v", err)
 	}
 	if humanize(nil) != nil || humanize(fetch.ErrOffline) != fetch.ErrOffline {

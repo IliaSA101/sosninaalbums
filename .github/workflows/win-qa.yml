@@ -1,4 +1,4 @@
-# Проверка Windows-exe на раннере (спека 118, docs/specs/0.25/118-win-qa-ci/design.md): набор qa-kit.sh на ubuntu, затем сценарии
+# Проверка Windows-exe на раннере (спека 118, docs/specs/archive/0.22-0.26/0.25/118-win-qa-ci/design.md): набор qa-kit.sh на ubuntu, затем сценарии
 # на windows-2025 (установщик, окна, снимки, ролики) и сводка report. Запуск только по ветке winqa/<имя> (её строит
 # scripts/winqa-push.mjs: коммит-сирота без кухни проекта) или руками (workflow_dispatch). Секретов и прав записи нет;
 # pull_request не включён: чужие PR не должны запускать задания Windows. Скрипты — из того же коммита, что и этот файл.

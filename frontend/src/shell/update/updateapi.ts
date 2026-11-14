@@ -5,6 +5,7 @@ import * as UpdateGo from '../../../wailsjs/go/app/App'
 import type { app } from '../../../wailsjs/go/models'
 
 export { UpdateGo }
+
 export type UpdateInfo = app.UpdateInfo
 
 // update:progress — в биндинги не попадает (событие, не тип метода).
@@ -27,4 +28,8 @@ export const NO_UPDATE: UpdateInfo = {
   checked: 0,
   just: '',
   failed: '',
+  os: '',
+  osNeed: '',
+  blocked: '',
+  last: '',
 }

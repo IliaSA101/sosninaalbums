@@ -216,7 +216,7 @@ func (s *Store) SaveLook(theme, name string, t looktpl.AlbumTpl) (Item, error) {
 	if name = cleanName(name); name == "" {
 		return Item{}, ErrName
 	}
-	if !ownTheme(theme) {
+	if !s.ownTheme(theme) {
 		theme = ThemeMine
 	}
 	c, data, err := packLook(t)

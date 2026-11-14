@@ -2,6 +2,19 @@
 
 Чек-лист для каждой сборки, которая уходит пользователю (exe) или на GitHub (`main`).
 
+## 0. Начало версии: патч Go
+
+Свежий патч Go ставится в начале каждой версии (спека 171, владелец 13.11), а не перед выпуском: версия одна во всех закреплениях.
+
+```
+node scripts/go-pin.mjs --latest            # свежий патч текущего минора и последний минор (go.dev/dl)
+node scripts/go-pin.mjs --write go1.26.N    # go.mod и api/albums/go.mod, все go-version в workflow, THIRD_PARTY_NOTICES.txt, docs/qa/e2e-regress.md
+node scripts/go-pin.mjs --check             # всё равно toolchain из go.mod; плисты и MAC_MIN_OS не ниже порога macOS у этого минора Go
+```
+
+- Вне репозитория скрипт не правит: `.claude/settings.local.json` (`GOTOOLCHAIN`) и `.claude/LOCAL.md` — вручную на обеих машинах; затем `go version` и сверка sha256 exe двух машин (`CGO_ENABLED=0`). `--check` вызывает и `release-preflight.mjs` (расхождение — FAIL до метки).
+- Новый минор (1.26 → 1.27) — шаг, а не патч: порог macOS берётся из таблицы `MAC_FLOOR` в `go-pin.mjs` (нет минора — отказ, впишите по go.dev/doc/go1.N, Ports). `--check` не пропустит, пока `LSMinimumSystemVersion` в `build/darwin/Info.plist` и `Info.dev.plist` и `MAC_MIN_OS` в `scripts/mac/smoke.sh` ниже порога. Весь список шага — `docs/specs/0.40/171-go-bridge/design.md` §9 (первая строка «Что нового» — «Нужна macOS 13 Ventura или новее»).
+
 ## 1. Версия
 
 - `wails.json` → `info.productVersion`: семвер, `0.X.0` — новая функциональность, `0.X.Y` — исправления. Это единственный источник: Go встраивает его через `go:embed` в `main.go` и передаёт в `app.Run` (разбор — `internal/app/version.go`), версия видна в шапке окна и пишется в `log.txt` при запуске.
@@ -67,6 +80,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
   - Где zip примера при сборке: `internal/demopack/*.zip` (ровно один — задания macos и pack отказывают иначе); сумма и размер закреплены константами `demopack.Size` и `demopack.SHA256`, бюджет 20 МиБ. Сборка у разработчика: `build.sh --installer --standard` / `build.ps1 -Installer -Standard`, `--native --deb --standard` — и пакет данных.
   - Проверка установщика (`win-check`, `installer-check.ps1`, 0.30-142-43): стандартный X → компактный X+1 `/S` (`data\` цел, `uninstall.exe` версии X+1 чистит `data\` и папку); стандартный X → собственное удаление. Той же версии `/S` выходит с кодом 4 и ничего не ставит. В Linux-проверке ставятся оба `.deb`, затем `apt remove sosninaalbums sosninaalbums-demo`; в проверке Mac второй `smoke.sh` идёт на стандартном zip. Шаги macos, mac-check и win-check проверяются только пробным прогоном `release.yml` с `dry_run` (п. 1б) — один на три ОС. Живой посредник MCP (`SosninaAlbums.exe --mcp`, 0.31-143-32): программа «открыта» только по замку Wails, занятый exe без замка ждёт 5 с и меняется переименованием; занятый `.old` уходит в `.old-<тики>`; деинсталлятор при занятом exe спрашивает «Повтор». Сценарий с настоящим посредником — на `winqa` (Т1), `win-check` ставит занятую папку `.exe.old` вместо него.
   - **До выпуска 0.29:** ассет библиотеки `wedding-navy-watercolor-demo-v1` (файл `wedding-navy-watercolor-demo-1.zip`) должен быть опубликован в релизах `sosninaalbums-library` — без него «Скачать» и «Вернуть» в компактной не работают; `release-preflight.mjs` сверяет его с сетью. Публикует оркестратор с «да» владельца (`gh release create wedding-navy-watercolor-demo-v1`, порядок — `docs/architecture/library.md` «Публикация набора»).
+  - Поля манифеста обновления о системе (спека 171, design §7): `minOS.darwin` — максимум из `LSMinimumSystemVersion` плиста метки и порога macOS у Go её `go.mod`; `lastOn.darwin` — лестница «порог системы → последняя версия для систем ниже порога» по опубликованным выпускам от `v0.40.0` до текущей (`gh release list`: не черновик и не prerelease, имя `vX.Y.Z`) с меньшим минимумом. Всё `release-sign.mjs` берёт из меток сам, флагов для выпуска нет; метки должны быть в локальном репозитории (`git fetch --tags`), иначе отказ. Больше 8 ступеней — отказ (форму поля меняет только `format` 2). В 0.40 выходит `minOS: {"darwin":"12.0"}` без `lastOn`. Флаги `--min-os darwin=13.0` и `--last-on darwin:13.0=0.42.0` (повторяемые) — только вместе с `--from` (стенд QA, `docs/qa/update.md`); `--from` без флагов — манифест без этих полей, метки не читаются.
   - Манифест обновления (`release-sign.mjs`) — только компактный: ключ `windows-x64-setup`; стандартный установщик в манифест не идёт, его сумма — в `SHA256SUMS.txt` (0.30-142-35, 0.30-142-46). Mac: обновление компактным zip заменяет `.app` целиком, файл примера из `Resources` пропадает — «Вернуть» без сети покажет «Скачать» (0.30-142-45).
 - Лицензии (GPL-3.0-only + п. 7(b), состав файлов) — [release/license.md](release/license.md).
 

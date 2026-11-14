@@ -119,6 +119,60 @@ describe('update:offer', () => {
   })
 })
 
+const lastWin = (p: Partial<UpdateInfo> = {}) =>
+  win({ phase: 'latest', mode: 'page', os: 'darwin', osNeed: '13.0', blocked: '0.43.0', last: '0.43.0', ...p })
+const LAST_TEXT = 'Вышла версия 0.43.0 для macOS 13 и новее. Ваша версия программы — последняя для этой системы'
+
+describe('update:last — «последняя для вашей системы» (171)', () => {
+  it('событие: тост без кнопки; повтор той же версии молчит, новая — снова', () => {
+    ui.lastTold(lastWin())
+    expect(toast()).toMatchObject({ text: LAST_TEXT, kind: 'info' })
+    expect(toast()?.action).toBeUndefined()
+    store.toast = null
+    ui.lastTold(lastWin())
+    expect(toast()).toBeNull()
+    ui.lastTold(lastWin({ blocked: '0.44.0', last: '0.44.0' }))
+    expect(toast()?.text).toContain('Вышла версия 0.44.0')
+  })
+
+  it('опрос при запуске: Info().last → тот же тост; событие того же сеанса его не дублирует', async () => {
+    go.UpdateInfo.mockResolvedValue(lastWin())
+    await ui.start()
+    expect(toast()?.text).toBe(LAST_TEXT)
+    store.toast = null
+    ui.lastTold(lastWin())
+    expect(toast()).toBeNull()
+  })
+
+  it('сперва событие, потом опрос — один тост', async () => {
+    ui.lastTold(lastWin())
+    store.toast = null
+    go.UpdateInfo.mockResolvedValue(lastWin())
+    await ui.start()
+    expect(toast()).toBeNull()
+  })
+
+  it('last пуст (ручная проверка, повторный запуск) — тоста нет, строка блока остаётся по blocked', async () => {
+    go.UpdateInfo.mockResolvedValue(lastWin({ last: '' }))
+    await ui.start()
+    expect(toast()).toBeNull()
+    expect(updateView(ui.info).line).toBe('Эта версия — последняя для вашей системы')
+    ui.lastTold(lastWin({ last: '' }))
+    expect(toast()).toBeNull()
+  })
+
+  it('итог прошлого обновления главнее тоста о системе (один тост за запуск)', async () => {
+    go.UpdateInfo.mockResolvedValue(lastWin({ just: '0.42.0' }))
+    await ui.start()
+    expect(toast()?.text).toBe('Программа обновлена до 0.42.0')
+  })
+
+  it('ступень lastOn: обычное предложение «Вышла версия 0.42.0» без тоста о системе', () => {
+    ui.offered(win({ phase: 'available', mode: 'page', version: '0.42.0', os: 'darwin', osNeed: '13.0', blocked: '0.43.0' }))
+    expect(toast()).toMatchObject({ text: 'Вышла версия 0.42.0', action: { label: 'Скачать' } })
+  })
+})
+
 describe('тост «Вышла версия» при запуске (интерфейс подписался позже Go)', () => {
   it('начальное состояние available и atStart → тот же тост; событие offer того же сеанса его не дублирует', async () => {
     go.UpdateInfo.mockResolvedValue(win({ phase: 'available', version: '0.25.1', atStart: true }))

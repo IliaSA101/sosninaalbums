@@ -1,6 +1,6 @@
 package album_test
 
-// Голден-реплей поведения Editor (023 Ш0, docs/specs/archive/0.8/023-editor-core/critic.md п.7):
+// Голден-реплей поведения Editor (023 Ш0, docs/specs/archive/0.6-0.9/0.8/023-editor-core/critic.md п.7):
 // каждый публичный метод хотя бы раз по фикстуре, после правки — View, глубина отмены
 // и возврата, rev и sha256 байтов Save. Ловит дрейф поведения при переносе ядра,
 // который точечные тесты не видят. Эталон — testdata/replay.json.gz (gzip, строка — шаг),

@@ -81,13 +81,17 @@ type Store struct {
 
 	ioMu sync.Mutex // Import, Rename, Hide: чтение-правка-запись реестра по одной
 
-	mu       sync.RWMutex
-	entries  []*entry                     // порядок файла; запись сохраняет и чужие виды
-	files    map[string]map[string]string // вид → ключ → путь файла на диске (скан + импорт)
-	packs    []*packReg                   // наборы (packs.go) по installed
-	demo     demoRef                      // пример темы (SetDemo): поведение по id, не по origin
-	readOnly bool
-	qrScan   int // версия миграции признака QR (qr_migrate.go); qrScanV — стикеры просмотрены
+	mu      sync.RWMutex
+	entries []*entry                     // порядок файла; запись сохраняет и чужие виды
+	files   map[string]map[string]string // вид → ключ → путь файла на диске (скан + импорт)
+	packs   []*packReg                   // наборы (packs.go) по installed
+	demo    demoRef                      // пример темы (SetDemo): поведение по id, не по origin
+	// Таблица тем (themes.go): порядок показа без выборок и индекс тем наборов; пересобирается под mu.
+	tab         []themeDef
+	tabIdx      map[string]int
+	themeLogged map[string]bool // наборы, чьи пропуски тем уже в log.txt за сеанс
+	readOnly    bool
+	qrScan      int // версия миграции признака QR (qr_migrate.go); qrScanV — стикеры просмотрены
 
 	media   *mediaCache
 	svg     svgTokens   // проверенные SVG, ждущие PNG от окна (AddPNG)
@@ -112,6 +116,7 @@ func Open(cfgDir string) *Store {
 	s.scan()
 	s.load()
 	s.loadPacks()
+	s.rebuildThemes()
 	s.migrateQR()
 	return s
 }
@@ -235,7 +240,7 @@ func (s *Store) load() {
 			continue
 		}
 		seen[e.Kind+"\x00"+e.Key] = true
-		if !ownTheme(e.Theme) {
+		if !validOwnTheme(e.Theme) { // тема набора, которого ещё нет, остаётся: Catalog покажет в «Моих»
 			e.Theme = ThemeMine
 		}
 		if e.Name = cleanName(e.Name); e.Name == "" {

@@ -206,3 +206,87 @@ describe('прыжок на «Новые» при открытии (takeFresh)',
     expect(decor.filters.pack).toBe('')
   })
 })
+
+// 170 U1: темы наборов (id из манифеста) — те же строки, что и встроенные; порядок и имена только из Go.
+describe('темы наборов (170 U1)', () => {
+  // Порядок Go: «Праздник», под ним темы наборов, «Универсальные» после; фронт его не трогает.
+  const themes = [
+    { id: NEW, name: 'Новые', count: 1 },
+    { id: RECENT, name: 'Недавние', count: 1 },
+    { id: ALL, name: 'Все', count: 4 },
+    { id: 'holiday', name: 'Праздник', count: 1 },
+    { id: 'newyear', name: 'Новый год', count: 2 },
+    { id: 'birthday', name: 'День рождения', count: 1 },
+    { id: 'basic', name: 'Универсальные', count: 1 },
+    { id: 'brand', name: 'Фирменные', count: 1 },
+    { id: MINE, name: 'Мои', count: 0 },
+  ]
+  const ny = cat({
+    themes,
+    items: [
+      item('sa:h', 'holiday'),
+      item('pk:ny1', 'newyear', { pack: 'Новый год', packId: 'holiday-newyear' }),
+      item('pk:ny2', 'newyear', { pack: 'Новый год', packId: 'holiday-newyear' }),
+      item('pk:bd', 'birthday', { pack: 'День рождения', packId: 'holiday-birthday' }),
+      item('sa:b', 'basic'),
+    ],
+    new: ['pk:ny1'],
+    recent: [],
+  })
+
+  it('боковой список — ровно в порядке Go, без перестановки и своих слов', () => {
+    expect(sideItems(ny).map((s) => [s.id, s.label])).toEqual(themes.map((t) => [t.id, t.name]))
+    expect(sideItems(ny).map((s) => s.id)).toEqual(['new', 'recent', 'all', 'holiday', 'newyear', 'birthday', 'basic', 'brand', 'mine'])
+  })
+
+  it('тема набора выбирается: плитки только её, «Все» — всё', () => {
+    expect(themeItems(ny, 'newyear').map((i) => i.id)).toEqual(['pk:ny1', 'pk:ny2'])
+    expect(themeItems(ny, 'holiday').map((i) => i.id)).toEqual(['sa:h'])
+    expect(themeItems(ny, ALL)).toHaveLength(5)
+    expect(themeItems(ny, 'unknown')).toEqual([])
+  })
+
+  it('тема набора не выборка; своё можно положить, импорт идёт в неё', () => {
+    expect(isSelection('newyear')).toBe(false)
+    expect(noOwn('newyear')).toBe(false)
+    expect(importTheme('newyear')).toBe('newyear')
+  })
+
+  it('в списке «Сохранить как…» — в порядке Go, без выборок и служебных', () => {
+    expect(saveThemes(ny).map((t) => t.id)).toEqual(['holiday', 'newyear', 'birthday', 'basic', 'mine'])
+    expect(saveTheme('newyear')).toBe('newyear')
+  })
+
+  it('прыжок после установки: тема первой плитки набора, а не «Праздник»; прежний выбор — если он есть', () => {
+    expect(firstSource({ ...ny, new: [] }, '', new Set(['День рождения']))).toBe('birthday')
+    expect(firstSource(ny, 'newyear')).toBe('newyear')
+    expect(firstSource(ny, 'baby')).toBe(RECENT) // такой темы нет — «Недавние» (в них есть счёт)
+  })
+
+  it('темы нет в каталоге (набор удалён) — прежний выбор не держится', () => {
+    const gone = cat({ themes: themes.filter((t) => t.id !== 'newyear'), items: ny.items.filter((i) => i.theme !== 'newyear'), new: [] })
+    expect(firstSource(gone, 'newyear')).toBe(RECENT)
+    expect(sideItems(gone).map((s) => s.id)).not.toContain('newyear')
+  })
+
+  it('предмет набора с двумя темами: у каждой своя тема, плитки не двоятся в «Все»', () => {
+    // holiday-birthday: 20 предметов в holiday (id темы набора тут — birthday) и 22 в kids (kidsparty)
+    const two = cat({
+      themes: [
+        { id: ALL, name: 'Все', count: 3 },
+        { id: 'birthday', name: 'День рождения', count: 2 },
+        { id: 'kidsparty', name: 'Детский праздник', count: 1 },
+      ],
+      items: [
+        item('pk:a', 'birthday', { pack: 'День рождения' }),
+        item('pk:b', 'birthday', { pack: 'День рождения' }),
+        item('pk:c', 'kidsparty', { pack: 'День рождения' }),
+      ],
+      new: [],
+    })
+    expect(themeItems(two, 'birthday')).toHaveLength(2)
+    expect(themeItems(two, 'kidsparty').map((i) => i.id)).toEqual(['pk:c'])
+    expect(themeItems(two, ALL)).toHaveLength(3)
+    expect(freshSource(two, new Set(['День рождения']))).toBe('birthday')
+  })
+})

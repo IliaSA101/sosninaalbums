@@ -36,6 +36,7 @@ type Output struct {
 	Family      string   `json:"family"`
 	Name        string   `json:"name"`
 	Theme       string   `json:"theme"`
+	Topic       string   `json:"topic,omitempty"` // id объявленной темы набора; Theme тогда — её база
 	Src         string   `json:"src"`
 	Index       int      `json:"index,omitempty"` // номер нарезки в источнике, с 1
 	W           int      `json:"w"`
@@ -63,6 +64,7 @@ type Report struct {
 	Counts   map[string]int   `json:"counts"`
 	Styles   map[string]int   `json:"styles,omitempty"` // стикеров по стилям
 	Names    int              `json:"names"`            // имён всего (бюджет 106)
+	Themes   map[string]int   `json:"themes,omitempty"` // предметов по объявленным темам набора (topic)
 	Items    []*Output        `json:"items"`
 	Families map[string][]int `json:"families,omitempty"` // семейство → номера предметов
 	Errors   []string         `json:"errors,omitempty"`
@@ -81,6 +83,9 @@ func (r *Report) Text() string {
 		r.ID, r.Version, len(r.Items), r.Counts[KindBg], r.Counts[KindFrame], r.Counts[KindCorner], r.Counts[KindDivider], r.Counts[KindSticker], r.Names, BudgetNames)
 	for _, s := range sortedKeys(r.Styles) {
 		fmt.Fprintf(&b, "  стикеров в стиле «%s»: %d из %d\n", s, r.Styles[s], BudgetStickerEach)
+	}
+	for _, id := range sortedKeys(r.Themes) {
+		fmt.Fprintf(&b, "  тема набора «%s»: предметов %d\n", id, r.Themes[id])
 	}
 	for _, s := range r.Skipped {
 		fmt.Fprintf(&b, "пропущено: %s\n", s)
@@ -201,6 +206,12 @@ func (r *Report) collect() {
 	r.Families = map[string][]int{}
 	for _, o := range r.Items {
 		r.Families[o.Family] = append(r.Families[o.Family], o.N)
+		if o.Topic != "" {
+			if r.Themes == nil {
+				r.Themes = map[string]int{}
+			}
+			r.Themes[o.Topic]++
+		}
 		for _, f := range o.Flags {
 			r.Flags = append(r.Flags, fmt.Sprintf("№%d %s: %s", o.N, o.File, f))
 		}

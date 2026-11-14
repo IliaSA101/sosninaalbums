@@ -10,6 +10,7 @@
     updateUi.host = { whatsNew: () => run('whatsNew') }
     const off = [
       EventsOn('update:offer', (i: UpdateInfo) => updateUi.offered(i)),
+      EventsOn('update:last', (i: UpdateInfo) => updateUi.lastTold(i)),
       EventsOn('update:state', (i: UpdateInfo) => updateUi.changed(i)),
       EventsOn('update:progress', (p: UpdateProgress) => updateUi.progressed(p)),
     ]

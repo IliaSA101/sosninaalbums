@@ -59,6 +59,13 @@ type Info struct {
 	Checked int64    `json:"checked"` // мс, последняя удачная проверка; 0 — не было
 	Just    string   `json:"just"`    // версия, до которой только что обновились (один раз)
 	Failed  string   `json:"failed"`  // версия, которая не поставилась (один раз)
+	// Система (171): правило minOS. OS — GOOS (на стенде — подменённый); Blocked — версия, которой
+	// нужна система новее нашей ("" — правило не сработало), OSNeed — её минимум; Last — одноразово:
+	// показать тост «Вышла версия Blocked, ваша — последняя для этой системы» (Info и update:last).
+	OS      string `json:"os"`
+	OSNeed  string `json:"osNeed"`
+	Blocked string `json:"blocked"`
+	Last    string `json:"last"`
 }
 
 // Progress — данные события update:progress.
@@ -96,6 +103,7 @@ type Host struct {
 	StartTimes func() (delay, every time.Duration)
 	Client     func() (c *update.Client, auto bool) // клиент и разрешена ли проверка при запуске (в dev без стенда — нет)
 	GOOS       func() string
+	OSVersion  func() (string, bool)             // сырая строка версии ОС (osx.OSVersion)
 	Exe        func() (string, error)            // путь запущенного exe
 	Dir        func() string                     // папка скачанного (update.Dir); "" — кэша нет
 	Free       func(dir string) (uint64, error)  // свободное место на томе
@@ -115,6 +123,7 @@ type Service struct {
 	errOf   string // операция, давшая err (ErrOf*)
 	just    string
 	failed  string
+	sysOS   sysState           // система по итогу проверки (os.go)
 	cancel  context.CancelFunc // идущая проверка или скачивание
 	busy    bool
 	started atomic.Bool // проверка при запуске — раз за сеанс
@@ -162,6 +171,10 @@ func (s *Service) snapLocked(u prefs.Update) Info {
 		info.Version, info.Notes = o.Version, append(info.Notes, o.Notes...)
 	}
 	info.Mode = string(s.mode(s.offer))
+	info.OS, info.OSNeed, info.Blocked = s.sysOS.os, s.sysOS.need, s.sysOS.blocked
+	if info.OS == "" {
+		info.OS = s.h.GOOS()
+	}
 	return info
 }
 
@@ -174,8 +187,8 @@ func (s *Service) Info() (info Info) {
 	defer appkit.Guard("UpdateInfo")
 	info = s.snap()
 	s.mu.Lock()
-	info.Just, info.Failed = s.just, s.failed
-	s.just, s.failed = "", ""
+	info.Just, info.Failed, info.Last = s.just, s.failed, s.sysOS.last
+	s.just, s.failed, s.sysOS.last = "", "", ""
 	s.mu.Unlock()
 	return info
 }
@@ -267,7 +280,11 @@ func (s *Service) check(silent bool) {
 	if c.Stand() {
 		seen = "" // версии ленты стенда не сверяются с настоящими выпусками
 	}
-	res, err := update.Check(ctx, c, s.h.Version(), seen)
+	sys := update.SystemOf(s.h.OSVersion)
+	if sys.StandBad {
+		log.Printf("обновление: SA_UPDATE_OS не разобрана — подмены системы нет")
+	}
+	res, err := update.Check(ctx, c, s.h.Version(), seen, sys)
 	if err != nil {
 		log.Printf("обновление: проверка не удалась: %s", update.Detail(err))
 		if !silent {
@@ -275,17 +292,28 @@ func (s *Service) check(silent bool) {
 		}
 		return
 	}
-	if c.Stand() { // ленту стенда QA в config.json не пишем: Seen и Checked настоящих выпусков остаются
+	told := false
+	if c.Stand() { // ленту стенда QA в config.json не пишем: Seen, Checked и osTold настоящих выпусков остаются
 		log.Printf("обновление: источник — стенд, Seen и Checked не сохраняются")
+		told = silent && s.toldOnStand(res)
 	} else {
 		now := time.Now().UnixMilli()
-		prefs.UpdateUpdate(cfg, func(u *prefs.Update) { u.Checked, u.Seen = now, res.Seen })
+		prefs.UpdateUpdate(cfg, func(u *prefs.Update) {
+			u.Checked, u.Seen = now, res.Seen
+			// osTold — в той же записи, что Seen: тост «последняя для системы» один раз на версию (171-8).
+			told = silent && needTell(res) && u.OSTold != res.Blocked
+			if told {
+				u.OSTold = res.Blocked
+			}
+		})
 	}
 	if res.Rollback {
 		log.Printf("обновление: подписанный файл старее виденной версии — отклонён")
 	}
+	logSystem(res, sys)
 	s.mu.Lock()
 	s.offer, s.phase, s.err, s.errOf = res.Offer, phaseLatest, "", ""
+	s.noteSystem(res, sys)
 	if res.Offer != nil {
 		s.phase = phaseAvailable
 	}
@@ -296,6 +324,9 @@ func (s *Service) check(silent bool) {
 	s.emitState()
 	if silent && res.Offer != nil {
 		s.h.Emit("update:offer", s.snap())
+	}
+	if told {
+		s.emitLast(res.Blocked)
 	}
 }
 
@@ -416,17 +447,12 @@ func (s *Service) Install() (err error) {
 	return nil
 }
 
-// OpenPage — страница выпуска в браузере: проверенной версии, а без предложения — последнего
-// выпуска. Адрес строится здесь; от интерфейса его нет.
+// OpenPage — страница выпуска в браузере: проверенной версии, а без предложения — страница
+// установленной при блокировке системой или последнего выпуска. Адрес строится здесь; от интерфейса
+// его нет.
 func (s *Service) OpenPage() (err error) {
 	defer appkit.GuardErr("OpenUpdatePage", &err)
-	u := appkit.RepoURL + "/releases/latest"
-	s.mu.Lock()
-	if o := s.offer; o != nil && update.SetupName(o.Version) != "" {
-		u = appkit.RepoURL + "/releases/tag/v" + o.Version
-	}
-	s.mu.Unlock()
-	s.h.OpenURL(u)
+	s.h.OpenURL(s.pageURL())
 	return nil
 }
 

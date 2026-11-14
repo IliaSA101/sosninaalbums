@@ -117,6 +117,7 @@ function goodDeps(ov = {}) {
     'git status': { code: 0, out: '' },
     'git tag': { code: 0, out: '' },
     'node scripts/release-check.mjs': { code: 0, out: '' },
+    'node scripts/go-pin.mjs': { code: 0, out: '' },
     curl: { code: 0, out: 'HTTP/2 302\r\nlocation: https://cdn/x\r\n\r\nHTTP/2 200\r\ncontent-length: 1234\r\n\r\n' },
     ...ov.answers,
   }
@@ -131,9 +132,9 @@ function goodDeps(ov = {}) {
 }
 const failsOf = (res) => res.filter((r) => !r.ok)
 
-test('quickChecks: всё хорошо — одиннадцать OK и нет FAIL', () => {
+test('quickChecks: всё хорошо — двенадцать OK и нет FAIL', () => {
   const res = quickChecks(VER, goodDeps(), '/k.pem')
-  assert.equal(res.length, 11)
+  assert.equal(res.length, 12)
   assert.deepEqual(failsOf(res), [])
 })
 
@@ -151,6 +152,7 @@ test('quickChecks: каждая поломка даёт ровно один FAIL
     ['другой wails', { answers: { 'wails version': { code: 0, out: 'Wails CLI v2.15.0' } } }, /v2\.16\.0/],
     ['грязная копия', { answers: { 'git status': { code: 0, out: ' M a.go\n' } } }, /закоммитьте/],
     ['метка есть', { answers: { 'git tag': { code: 0, out: 'v0.25.1\n' } } }, /не перевешиваем/],
+    ['go-pin: закрепления разошлись', { answers: { 'node scripts/go-pin.mjs': { code: 1, out: 'go-pin: расхождения (1):\n  - go.mod: 1.26.9\n' } } }, /расхождения.*go\.mod.*go-pin\.mjs --write/],
     ['release-check красный', { answers: { 'node scripts/release-check.mjs': { code: 1, out: 'a\nb\n' } } }, /a \| b/],
     ['ассет примера не опубликован', { answers: { curl: { code: 0, out: 'HTTP/2 404\n\n' } } }, /опубликуйте релиз wedding-navy-watercolor-demo-v1/],
     ['ассет примера другой длины', { answers: { curl: { code: 0, out: 'HTTP/2 200\ncontent-length: 99\n' } } }, /длина в сети 99/],

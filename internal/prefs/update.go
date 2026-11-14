@@ -5,13 +5,15 @@ package prefs
 // мс последней удачной проверки, Seen — наибольшая версия в подписанных файлах выпуска (старее
 // неё файл — повтор старого выпуска, не предложение), Pending и PendingAt — версия, до которой
 // запущено обновление, и когда: после перезапуска по ним программа говорит «обновлена» или «не
-// установилось».
+// установилось». OSTold — версия, о которой тост «последняя для вашей системы» уже показан (171):
+// тост один раз на каждую новую недоступную версию.
 type Update struct {
 	Off       bool   `json:"off,omitempty"`
 	Checked   int64  `json:"checked,omitempty"`
 	Seen      string `json:"seen,omitempty"`
 	Pending   string `json:"pending,omitempty"`
 	PendingAt int64  `json:"pendingAt,omitempty"`
+	OSTold    string `json:"osTold,omitempty"`
 }
 
 // clean — после правки руками: время не отрицательное, версии x.y.z (иначе пусто); отметка
@@ -23,6 +25,9 @@ func (u Update) clean() Update {
 	}
 	if !validVersion(u.Pending) {
 		u.Pending = ""
+	}
+	if !validVersion(u.OSTold) {
+		u.OSTold = ""
 	}
 	if u.Pending == "" {
 		u.PendingAt = 0

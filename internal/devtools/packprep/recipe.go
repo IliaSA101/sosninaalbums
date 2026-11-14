@@ -51,9 +51,8 @@ const (
 )
 
 var (
-	idRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,39}$`)
-	verRe    = regexp.MustCompile(`^\d{1,4}\.\d{1,4}\.\d{1,4}$`)
-	themeSet = map[string]bool{"basic": true, "wedding": true, "kids": true, "kindergarten": true, "school": true, "grad": true, "holiday": true}
+	idRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,39}$`)
+	verRe = regexp.MustCompile(`^\d{1,4}\.\d{1,4}\.\d{1,4}$`)
 )
 
 // Recipe — рецепт набора: шапка манифеста и предметы (design §2.3). Неизвестное поле — отказ.
@@ -62,7 +61,8 @@ type Recipe struct {
 	Version int               `json:"version"`
 	MinApp  string            `json:"minApp"`
 	Title   string            `json:"title"`
-	Theme   string            `json:"theme"`
+	Theme   string            `json:"theme"`            // встроенная тема или id из themes (тема набора по умолчанию)
+	Themes  []ThemeDecl       `json:"themes,omitempty"` // объявления тем набора (спека 170): до 16
 	Author  string            `json:"author"`
 	License string            `json:"license"`
 	Source  string            `json:"source"`
@@ -166,8 +166,9 @@ func (r *Recipe) validate() error {
 	if !verRe.MatchString(r.MinApp) {
 		add("minApp %q: нужно x.y.z", r.MinApp)
 	}
-	if !themeSet[r.Theme] {
-		add("theme %q: нужна тема библиотеки (basic, wedding, kids, kindergarten, school, grad, holiday)", r.Theme)
+	errs = append(errs, checkThemeDecls(r.Themes)...)
+	if !r.themeKnown(r.Theme) {
+		add("theme %q: нужна тема библиотеки (basic, wedding, kids, kindergarten, school, grad, holiday) или id из themes", r.Theme)
 	}
 	if r.License != "CC0-1.0" {
 		add("license %q: наборы библиотеки выпускаются только как CC0-1.0", r.License)
@@ -194,7 +195,11 @@ func (r *Recipe) validate() error {
 		if err := r.Items[i].validate(); err != nil {
 			errs = append(errs, fmt.Errorf("packprep: items[%d] %q: %w", i, r.Items[i].Src, err))
 		}
+		if th := r.Items[i].Theme; th != "" && !r.themeKnown(th) {
+			add("items[%d] %q: theme %q: нужна тема библиотеки или id из themes", i, r.Items[i].Src, th)
+		}
 	}
+	errs = append(errs, r.checkThemeUse(r.recipeThemeUse())...)
 	errs = append(errs, r.checkSkip()...)
 	return errors.Join(errs...)
 }

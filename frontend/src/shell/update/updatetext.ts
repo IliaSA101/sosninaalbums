@@ -35,6 +35,24 @@ export const RESTART_LABEL = 'Перезапустить'
 export const retryAct = (i: Pick<UpdateInfo, 'mode' | 'errorOf'>): UpdateAct =>
   i.mode !== 'page' && (i.errorOf === 'download' || i.errorOf === 'install') ? 'download' : 'check'
 
+// Система словами: darwin 13.0 / 13.0.0 → «macOS 13» (все хвостовые .0 отбрасываются, 13.1 остаётся),
+// windows → «Windows 10», прочее → «система …». Минимума нет — «более новая система».
+export function osName(os: string, need: string): string {
+  const n = need.replace(/(\.0+)+$/, '')
+  if (!n) return 'более новая система'
+  if (os === 'darwin') return `macOS ${n}`
+  if (os === 'windows') return `Windows ${n}`
+  return `система ${n}`
+}
+
+// Подсказка блокировки (171): заменяет SETUP_HINT. С предложением ступени (available) — что это последняя для системы.
+export function blockHint(i: Pick<UpdateInfo, 'os' | 'osNeed' | 'blocked' | 'phase'>): string {
+  const need = i.osNeed ? `нужна ${osName(i.os, i.osNeed)} или новее` : 'нужна более новая система'
+  return i.phase === 'available'
+    ? `Это последняя версия для вашей системы: для ${i.blocked} и следующих ${need}`
+    : `Для версии ${i.blocked} и следующих ${need}`
+}
+
 const check = (disabled = false): UpdateBtn => ({ act: 'check', label: CHECK_LABEL, disabled })
 
 // «Скачиваем обновление — 3 из 8 МБ»; размер неизвестен — без чисел.
@@ -61,7 +79,8 @@ export function updateView(i: UpdateInfo): UpdateView {
     line: '',
     btns: [check()],
     pageLink: false,
-    hint: i.mode === 'setup' ? SETUP_HINT : '',
+    // Подсказка блокировки главнее «Поставьте установщиком»: на переносной Windows обе претендуют на одно место.
+    hint: i.blocked && (i.phase === 'latest' || i.phase === 'available') ? blockHint(i) : i.mode === 'setup' ? SETUP_HINT : '',
     notes: [],
     pct: null,
     busy: false,
@@ -72,7 +91,7 @@ export function updateView(i: UpdateInfo): UpdateView {
       v.btns = [check(true)]
       break
     case 'latest':
-      v.line = 'Установлена последняя версия'
+      v.line = i.blocked ? 'Эта версия — последняя для вашей системы' : 'Установлена последняя версия'
       break
     case 'available':
       v.line = `Вышла версия ${i.version}`
@@ -111,6 +130,12 @@ export function updateView(i: UpdateInfo): UpdateView {
 export function offerToast(i: UpdateInfo): { text: string; label: string; act: 'download' | 'page' } {
   const text = `Вышла версия ${i.version}`
   return i.mode === 'page' ? { text, label: 'Скачать', act: 'page' } : { text, label: 'Обновить', act: 'download' }
+}
+
+// Тост при запуске: вышла версия не для этой системы (update:last), кнопки нет — скачивать нечего.
+export function lastToast(i: Pick<UpdateInfo, 'os' | 'osNeed' | 'last'>): string {
+  const sys = i.osNeed ? `${osName(i.os, i.osNeed)} и новее` : 'более новой системы'
+  return `Вышла версия ${i.last} для ${sys}. Ваша версия программы — последняя для этой системы`
 }
 
 // Скачали и проверили: можно ставить. Переносной копии нажатие запускает установщик.

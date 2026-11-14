@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url'
 import zlib from 'node:zlib'
 import { makeZip } from './library-pack.mjs'
 import { LIMITS, checkZip, clean, imageInfo, manifestVerdict, parseManifest, report, validId, validName } from './pack-check.mjs'
+import { parseThemes, themeFold, validThemeId, validThemeName } from './pack-check/manifest.mjs'
+import { rawField } from './pack-check/rawfield.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./pack-check.mjs', import.meta.url))
 const CASES = path.resolve(path.dirname(SCRIPT), '..', 'testdata', 'pack-manifest-cases.json')
@@ -344,6 +346,71 @@ test('фаззинг манифеста: порча байтов и усечен
     const v = manifestVerdict(i % 5 === 0 ? b.subarray(0, rnd(b.length)) : b, i % 2 ? '0.31.0' : 'dev')
     assert.equal(typeof v.ok, 'boolean')
     if (!v.ok) assert.match(v.code, /^(newer|manifest|appOld|empty)$/)
+  }
+})
+
+// Только pack-check (аудит 170, п. 1): Go прочёл бы эти записи (`null` в ORDER обнуляет *int, у повтора побеждает последний
+// ключ), а зеркало строже и отвергает запись, чтобы не одобрить манифест иначе, чем его прочтёт программа. В общий файл
+// случаев не кладутся: у них Go-ожидание другое (170-31).
+test('темы: ключи записи, совпавшие после свёртки регистра, — запись отвергнута («повтор»)', () => {
+  const verdict = (rec) => {
+    const body = `{"format":1,"id":"ivory","version":3,"minApp":"0.16.0","title":"Т","themes":[${rec}],"items":[{"file":"bg/a.png","kind":"bg","theme":"kids","name":"x","sha256":"${'a'.repeat(64)}","size":5}]}`
+    return manifestVerdict(Buffer.from(body), '0.31.0')
+  }
+  for (const rec of ['{"id":"aaa","name":"Зима","order":5,"ORDER":null}', '{"id":"aaa","ID":"bbb","id":"ccc","name":"Зима"}', '{"name":"Зима","id":"aaa","Name":"Лето"}']) {
+    const v = verdict(rec)
+    assert.ok(v.ok, rec)
+    assert.deepEqual([v.themes, v.themeSkips, v.themeSkipN], [[], ['повтор'], 1], rec)
+  }
+  const ok = verdict('{"id":"aaa","name":"Зима","order":5,"future":1,"FUTURE":2}') // чужие повторы не мешают
+  assert.deepEqual([ok.themes.length, ok.themeSkipN], [1, 0])
+  const two = verdict('{"id":"aaa","ID":"bbb","name":"Зима"},{"id":"ccc","name":"Лето"}') // соседняя запись принимается
+  assert.deepEqual([two.themes.map((t) => t.id), two.themeSkips, two.themeSkipN], [['ccc'], ['повтор'], 1])
+})
+
+test('темы: сырой отрезок themes — по байтам, как RawMessage (пробелы, \\u-экраны, битый UTF-8, повтор и null)', () => {
+  const m = (k) => k.toLowerCase() === 'themes'
+  const doc = (body) => Buffer.from(body, 'latin1')
+  assert.equal(rawField(doc('{"a":1,"themes": [1, 2 ] ,"b":2}'), m).toString(), '[1, 2 ]')
+  assert.equal(rawField(doc('{"themes":[1],"THEMES":null}'), m).toString(), 'null')
+  assert.equal(rawField(doc('{"th\\u0065mes":"a]}","x":{"themes":1}}'), m).toString(), '"a]}"')
+  assert.equal(rawField(doc('{"x":"\\\\","themes":{"a":[{}]}}'), m).toString(), '{"a":[{}]}')
+  assert.equal(rawField(doc('{"x":1}'), m), undefined)
+  assert.equal(rawField(Buffer.from('[1]'), m), undefined)
+  // битый UTF-8 в строке: байты остаются своими (в тексте стали бы U+FFFD по 3 байта)
+  const bad = Buffer.concat([Buffer.from('{"themes":["'), Buffer.alloc(4090, 0xff), Buffer.from('"]}')])
+  assert.equal(rawField(bad, m).length, 4094)
+  assert.deepEqual(parseThemes(rawField(bad, m)), { themes: [], why: ['тип'], n: 1 }) // 4094 Б — в пределе, запись чужого типа
+  const over = Buffer.concat([Buffer.from('{"themes":["'), Buffer.alloc(4093, 0xff), Buffer.from('"]}')])
+  assert.deepEqual(parseThemes(rawField(over, m)), { themes: [], why: ['размер'], n: 1 }) // 4097 Б
+})
+
+test('темы: пустые, битые и огромные входы — итог, а не исключение; правила имени и регистра', () => {
+  for (const raw of [undefined, Buffer.from('null'), Buffer.from('[]'), Buffer.from('[{"id":"ta","name":"Ле'), Buffer.from('"x"'), Buffer.from('1e999'), Buffer.from('[' .repeat(5000)), Buffer.alloc(5000, 0x7b), Buffer.from('[{},{},{}]')]) {
+    const r = parseThemes(raw)
+    assert.ok(r.themes.length <= LIMITS.maxThemes && r.why.length <= 16)
+  }
+  assert.deepEqual(parseThemes(undefined), { themes: [], why: [], n: 0 })
+  assert.deepEqual(parseThemes(Buffer.from('null')), { themes: [], why: [], n: 0 })
+  assert.ok(!validThemeName('Ле\ufffdто') && !validThemeName('') && validThemeName('Ё'))
+  assert.equal(themeFold('ЁЛКА Summer İΣ'), 'ёлка summer İΣ')
+  assert.ok(validThemeId('newyear') && !validThemeId('constructor') && !validThemeId('holiday') && !validThemeId('NewYear'))
+})
+
+test('фаззинг манифеста с темами: порча байтов и усечение дают итог, темы в пределах', () => {
+  const rec = (i) => ({ id: `t${String.fromCharCode(97 + i)}`, name: `Тема ${i}`, base: 'kids', order: i + 1 })
+  const good = Buffer.from(JSON.stringify({ format: 1, id: 'abc', version: 1, minApp: '0.1.0', title: 'Т', themes: [rec(0), rec(1), rec(2)], items: [{ file: 'a.png', kind: 'bg', theme: 'kids', name: 'я', sha256: 'a'.repeat(64), size: 5, topic: 'ta' }] }))
+  let seed = 4242
+  const rnd = (n) => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0
+    return seed % n
+  }
+  for (let i = 0; i < 3000; i++) {
+    const b = Buffer.from(good)
+    for (let k = 0, m = 1 + rnd(3); k < m; k++) b[rnd(b.length)] = rnd(256)
+    const v = manifestVerdict(i % 5 === 0 ? b.subarray(0, rnd(b.length)) : b, 'dev')
+    assert.equal(typeof v.ok, 'boolean')
+    if (v.ok) assert.ok(v.themes.length <= LIMITS.maxThemes && v.themeSkips.length <= 16)
   }
 })
 

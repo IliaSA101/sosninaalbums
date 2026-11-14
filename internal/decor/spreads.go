@@ -239,7 +239,7 @@ func (s *Store) SaveSpreadTpl(theme, name string, t looktpl.SpreadTpl) (Item, er
 	if name = cleanName(name); name == "" {
 		return Item{}, ErrName
 	}
-	if !ownTheme(theme) {
+	if !s.ownTheme(theme) {
 		theme = ThemeMine
 	}
 	c, ok := looktpl.ClampSpreadTpl(t)

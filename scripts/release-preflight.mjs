@@ -5,7 +5,7 @@
 //
 // Быстрые проверки: makensis = NSIS_CI и раннер pack в release.yml закреплён (иначе версия NSIS в CI уплывёт), вход в gh,
 // файл ключа подписи (только существование, размер и права — содержимое не читается и не печатается), Node и Go как в CI,
-// wails как в go.mod, рабочая копия чистая, метки vX.Y.Z ещё нет, release-check --version зелёный, ассет примера набора
+// wails как в go.mod, go-pin --check (закрепления Go и порог macOS), рабочая копия чистая, метки vX.Y.Z ещё нет, release-check --version зелёный, ассет примера набора
 // (спека 142) опубликован в библиотеке и совпадает длиной с zip в репозитории.
 // --rebuild (2–6 мин): установщик собирается в чистой копии коммита HEAD (release-rebuild с ref) и должен воспроизводиться:
 // после сдвига mtime всех входов на год назад установщик из тех же входов обязан совпасть байт в байт.
@@ -139,6 +139,9 @@ export function quickChecks(version, deps, keyFile) {
   if (!wantGo) res.push(fail('Go', 'в go.mod нет строки toolchain'))
   else if (goOut.code !== 0 || haveGo !== wantGo) res.push(fail(`Go ${haveGo ?? 'не найден'}`, `go.mod просит go${wantGo}`))
   else res.push(ok(`Go ${haveGo} = go.mod`))
+  // go.mod, workflow, плисты и MAC_MIN_OS согласованы с версией Go (спека 171, design §8): расхождение — до метки, а не в CI
+  const pin = deps.exec('node', ['scripts/go-pin.mjs', '--check'])
+  res.push(pin.code === 0 ? ok('go-pin: закрепления Go и порог macOS согласованы') : fail('go-pin --check', `${pin.out.trim().split('\n').slice(0, 6).join(' | ')} (правка: node scripts/go-pin.mjs --write go1.N.P)`))
 
   const wantWails = mod === null ? null : wailsWanted(mod)
   const w = deps.exec('wails', ['version'])

@@ -8,6 +8,7 @@
 //   node scripts/release-sign.mjs --new-key <путь.pem>    создаёт пару, печатает открытый ключ (base64, 32 байта)
 //   node scripts/release-sign.mjs --test-key [путь.pem]   одноразовый ключ в .gotmp/ для тестов и QA (design §9)
 //   QA без выпуска на GitHub: --from <папка с setup.exe и SHA256SUMS.txt> [--whatsnew файл.ts] [--date ГГГГ-ММ-ДД]
+//       [--min-os darwin=13.0] [--last-on darwin:13.0=0.42.0]   (повторяемые; только с --from)
 //
 // Порядок (design §5.4): 1) gh release download установщика и SHA256SUMS.txt черновика; 2) sha256 установщика
 // обязан равняться строке SHA256SUMS.txt (её сделал CI по цепочке хешей заданий) — иначе отказ; 3) установщик
@@ -19,6 +20,10 @@
 // --dry — всё, кроме загрузки; --from и --whatsnew тоже ничего не загружают. --skip-rebuild (без пересборки) принимается
 // только вместе с --from: это QA на заготовленных файлах; настоящая подпись без пересборки невозможна.
 //
+// Поля minOS и lastOn (спека 171, design §7) настоящая подпись строит из меток, не из флагов: minOS.darwin = max(LSMinimumSystemVersion
+// плиста метки, порог macOS у Go её go.mod); lastOn — лестница ступеней по опубликованным выпускам от v0.40.0 (gh release list: не черновик
+// и не prerelease, имя по TAG_RE) с меньшим минимумом. С --from метки не читаются: поля — только из флагов, без флагов их нет.
+//
 // --bmp-mtime <unix-сек> (или SA_INSTALLER_BMP_MTIME) — для выпусков до 0.25.1: их установщик хранит mtime wizard.bmp и
 // header.bmp (момент checkout в pack CI); в копии метки время выставляется перед сборкой, остальная сверка — побайтно.
 // Закрытый ключ в вывод не печатается и не копируется; --new-key не перезаписывает существующий файл.
@@ -29,6 +34,7 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { publicRaw, signBytes, verifyBytes } from './library-pack.mjs'
 import { rebuildSetup } from './release-rebuild.mjs'
+import { OS_RE, PinError, cmpOS, goVersionOf, macFloor, maxOS, plistMin } from './go-pin.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const ASSET = 'SosninaAlbums-update.json'
@@ -38,6 +44,9 @@ export const MIN_SIZE = 1 << 20 // как internal/update.Parse: 1…80 МБ
 export const MAX_SIZE = 80 << 20
 export const MAX_NOTES = 8
 export const MAX_NOTE_LEN = 300
+export const MAX_STEPS = 8 // ступеней lastOn на ОС (internal/update.Parse)
+export const LADDER_FROM = '0.40.0' // ниже поле не читают: версии с minOS стоят на системе не старше 12.0
+const KNOWN_OS = ['darwin', 'windows', 'linux']
 export const MAX_ENVELOPE = 16 << 10 // конверт ≤ 16 КБ (fetch.Client.Signed)
 export const DEFAULT_MIN_AUTO = '0.25.0' // первая версия с автообновлением
 const VER_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/
@@ -184,7 +193,7 @@ export function checkDraftAssets(sums, assets) {
  * Внутренний JSON выпуска (ключи по порядку design §5.1). Проверяет то же, что internal/update.Parse, чтобы не
  * подписать файл, который программы отвергнут: версия, minAuto, ≤ 8 строк по ≤ 300 знаков, имя и размер установщика.
  */
-export function buildBody({ version, date, minAuto, notes, setup }) {
+export function buildBody({ version, date, minAuto, notes, setup, minOS, lastOn }) {
   if (!VER_RE.test(version ?? '')) throw new SignError(`версия «${version}» — ждали X.Y.Z`)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) throw new SignError(`дата «${date}» — ждали ГГГГ-ММ-ДД`)
   if (minAuto !== '' && !VER_RE.test(minAuto ?? '')) throw new SignError(`minAuto «${minAuto}» — пусто или X.Y.Z`)
@@ -198,6 +207,7 @@ export function buildBody({ version, date, minAuto, notes, setup }) {
     throw new SignError(`размер установщика ${setup.size} байт вне 1…80 МБ: программа его не примет`)
   }
   if (!/^[0-9a-f]{64}$/.test(setup.sha256)) throw new SignError('sha256 установщика — 64 hex нижним регистром')
+  checkOsFields(version, minOS, lastOn)
   return {
     format: 1,
     app: APP,
@@ -206,6 +216,144 @@ export function buildBody({ version, date, minAuto, notes, setup }) {
     minAuto,
     notes: lines,
     files: { [FILE_KEY]: { name: setup.name, size: setup.size, sha256: setup.sha256 } },
+    // новые поля — в конце: старые программы (0.25–0.39) пропускают их при любой форме
+    ...(minOS === undefined ? {} : { minOS }),
+    ...(lastOn === undefined ? {} : { lastOn }),
+  }
+}
+
+// ---- minOS и lastOn: проверка, метки, лестница (design §2, §7) ----
+
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
+const cmpVer = (a, b) => cmpOS(a, b) // x.y.z сравниваются по числам так же, как версии системы
+
+/** Те же правила, что у internal/update.Parse при goos == "": форма, шаблоны, порядок ступеней. Своих ключей release не пишет, поэтому неизвестная ОС — отказ. */
+function checkOsFields(version, minOS, lastOn) {
+  if (minOS !== undefined) {
+    if (!isObj(minOS)) throw new SignError('minOS — объект «ОС → версия системы»')
+    for (const [k, v] of Object.entries(minOS)) {
+      if (!KNOWN_OS.includes(k)) throw new SignError(`minOS: неизвестная ОС «${k}» (${KNOWN_OS.join(', ')})`)
+      if (typeof v !== 'string' || !OS_RE.test(v)) throw new SignError(`minOS.${k}: «${v}» — ждали версию системы вида 13.0`)
+    }
+  }
+  if (lastOn === undefined) return
+  if (!isObj(lastOn)) throw new SignError('lastOn — объект «ОС → лестница»')
+  for (const [k, steps] of Object.entries(lastOn)) {
+    if (!KNOWN_OS.includes(k)) throw new SignError(`lastOn: неизвестная ОС «${k}»`)
+    const need = minOS?.[k]
+    if (need === undefined) throw new SignError(`lastOn.${k} без minOS.${k}`)
+    if (!isObj(steps) || Object.keys(steps).length === 0) throw new SignError(`lastOn.${k}: ждали непустой объект «порог системы → версия программы»`)
+    const keys = Object.keys(steps)
+    if (keys.length > MAX_STEPS) throw new SignError(`lastOn.${k}: ${keys.length} ступеней, больше ${MAX_STEPS}: форма поля меняется только через format 2 (design §2)`)
+    let prev = null
+    for (const key of keys.sort(cmpOS)) {
+      const last = steps[key]
+      if (!OS_RE.test(key)) throw new SignError(`lastOn.${k}: порог «${key}» — ждали версию системы вида 13.0`)
+      if (typeof last !== 'string' || !VER_RE.test(last)) throw new SignError(`lastOn.${k}.${key}: «${last}» — ждали X.Y.Z`)
+      if (cmpOS(key, need) > 0) throw new SignError(`lastOn.${k}: порог ${key} выше minOS.${k} ${need}`)
+      if (cmpVer(last, version) >= 0) throw new SignError(`lastOn.${k}.${key}: ${last} не старше выпуска ${version}`)
+      if (prev !== null) {
+        if (cmpOS(prev.key, key) === 0) throw new SignError(`lastOn.${k}: порог ${key} повторён (${prev.key})`)
+        if (cmpVer(prev.last, last) > 0) throw new SignError(`lastOn.${k}: чем выше порог, тем не старше версия (${prev.key} → ${prev.last}, ${key} → ${last})`)
+      }
+      prev = { key, last }
+    }
+  }
+}
+
+/** Минимальная macOS выпуска по метке: max(LSMinimumSystemVersion из плиста метки, порог macOS у Go из её go.mod). */
+export function macMin(tag, git) {
+  const show = (file) => {
+    try {
+      return git(['show', `${tag}:${file}`]).toString()
+    } catch (e) {
+      throw new SignError(`${tag}:${file} не прочитан (метки нет локально? git fetch --tags): ${e.message}`)
+    }
+  }
+  const go = goVersionOf(show('go.mod'))
+  if (!go) throw new SignError(`в go.mod метки ${tag} нет строки toolchain и go`)
+  let floor
+  try {
+    floor = macFloor(go)
+  } catch (e) {
+    if (e instanceof PinError) throw new SignError(`${tag}: ${e.message}`)
+    throw e
+  }
+  const ls = plistMin(show('build/darwin/Info.plist'))
+  if (ls === null) return floor
+  if (!OS_RE.test(ls)) throw new SignError(`${tag}: LSMinimumSystemVersion «${ls}» в Info.plist — не версия системы`)
+  return maxOS(ls, floor)
+}
+
+/**
+ * Метки для лестницы: опубликованные выпуски (не черновик, не prerelease — в списке gh это булевы isDraft/isPrerelease), имя по TAG_RE,
+ * версия от LADDER_FROM до текущей (не включая её); по убыванию версии. Метка на черновик или чужое имя дала бы ступень на страницу 404.
+ */
+export function ladderTags(list, version) {
+  const seen = new Set()
+  for (const r of list) {
+    const v = isObj(r) && r.isDraft === false && r.isPrerelease === false && typeof r.tagName === 'string' ? TAG_RE.exec(r.tagName)?.[1] : undefined
+    if (v && cmpVer(v, LADDER_FROM) >= 0 && cmpVer(v, version) < 0) seen.add(v)
+  }
+  return [...seen].sort((a, b) => cmpVer(b, a))
+}
+
+/**
+ * Лестница {порог: версия} по меткам (по убыванию версии, у каждой — свой минимум): порог — минимум текущего выпуска; метка
+ * с минимумом ниже порога — ступень «системам ниже порога — эта версия», дальше порог — её минимум. Метки с минимумом не ниже
+ * порога пропускаются. Порядок ключей — от высокого порога к низкому, как в design §2.
+ */
+export function buildLadder(min, tags) {
+  const steps = {}
+  let threshold = min
+  for (const t of tags) {
+    if (cmpOS(t.min, threshold) >= 0) continue
+    steps[threshold] = t.version
+    threshold = t.min
+  }
+  if (Object.keys(steps).length > MAX_STEPS) throw new SignError(`ступеней lastOn ${Object.keys(steps).length}, больше ${MAX_STEPS}: форма поля меняется только через format 2 (design §2); сообщите владельцу`)
+  return steps
+}
+
+/** Поля манифеста настоящего выпуска из меток: {minOS, lastOn?}. deps.git и deps.gh — как в signRelease; метки ниже LADDER_FROM не читаются. */
+export function releaseFields(tag, version, deps) {
+  const min = macMin(tag, deps.git)
+  const fields = { minOS: { darwin: min } }
+  if (cmpVer(version, LADDER_FROM) <= 0) return fields
+  let list
+  try {
+    list = JSON.parse(deps.gh(['release', 'list', '--json', 'tagName,isDraft,isPrerelease', '--limit', '1000']).toString())
+  } catch (e) {
+    if (e instanceof SignError) throw e
+    throw new SignError('gh release list: ответ не JSON')
+  }
+  if (!Array.isArray(list)) throw new SignError('gh release list: ждали список выпусков')
+  const tags = ladderTags(list, version).map((v) => ({ version: v, min: macMin(`v${v}`, deps.git) }))
+  const steps = buildLadder(min, tags)
+  if (Object.keys(steps).length) fields.lastOn = { darwin: steps }
+  return fields
+}
+
+/** Флаги QA стенда: minArgs — «ОС=версия», lastArgs — «ОС:порог=версия»; пусто — undefined (поля нет). Код 2: неверный вызов. */
+export function parseOsFlags(minArgs, lastArgs) {
+  const minOS = new Map()
+  for (const a of minArgs) {
+    const m = /^([a-z]+)=(.+)$/.exec(a)
+    if (!m) throw new SignError(`--min-os: ждали ОС=версия (darwin=13.0), получено «${a}»`, 2)
+    if (minOS.has(m[1])) throw new SignError(`--min-os: ${m[1]} задан дважды`, 2)
+    minOS.set(m[1], m[2])
+  }
+  const lastOn = new Map()
+  for (const a of lastArgs) {
+    const m = /^([a-z]+):([^=]+)=(.+)$/.exec(a)
+    if (!m) throw new SignError(`--last-on: ждали ОС:порог=версия (darwin:13.0=0.42.0), получено «${a}»`, 2)
+    const steps = lastOn.get(m[1]) ?? new Map()
+    if (steps.has(m[2])) throw new SignError(`--last-on: порог ${m[1]}:${m[2]} задан дважды`, 2)
+    lastOn.set(m[1], steps.set(m[2], m[3]))
+  }
+  return {
+    minOS: minOS.size ? Object.fromEntries(minOS) : undefined,
+    lastOn: lastOn.size ? Object.fromEntries([...lastOn].map(([k, v]) => [k, Object.fromEntries(v)])) : undefined,
   }
 }
 
@@ -287,7 +435,7 @@ export function parseBmpMtime(v) {
 /**
  * Подписывает выпуск tag. deps: gh(args) и git(args) -> строка/Buffer, rebuild({tag, version, work, bmpMtime}) -> путь к
  * установщику, пересобранному из метки (в тестах подменяются).
- * opts: {tag, keyPath, dry, minAuto, from, whatsnew, date, keysFile, work, skipRebuild, bmpMtime}. Возвращает {file, version, size, sha256, uploaded}.
+ * opts: {tag, keyPath, dry, minAuto, from, whatsnew, date, keysFile, work, skipRebuild, bmpMtime, minOS, lastOn (только с from)}. Возвращает {file, version, size, sha256, uploaded}.
  */
 export function signRelease(opts, deps) {
   const m = TAG_RE.exec(opts.tag ?? '')
@@ -295,9 +443,17 @@ export function signRelease(opts, deps) {
   const version = m[1]
   // без пересборки подписывает только QA на готовых файлах (--from); настоящая подпись без неё не бывает
   if (opts.skipRebuild && !opts.from) throw new SignError('--skip-rebuild допустим только вместе с --from (QA-режим): настоящий выпуск подписывается только после пересборки установщика', 2)
+  // поля minOS и lastOn в настоящей подписи — только из меток; флаги нужны стенду QA и бывают лишь с --from
+  if ((opts.minOS !== undefined || opts.lastOn !== undefined) && !opts.from) {
+    throw new SignError('--min-os и --last-on допустимы только вместе с --from (QA стенда): в настоящей подписи поля берутся из меток', 2)
+  }
   // ключ — первым: без него не тратим время на скачивание
   const key = loadKey(opts.keyPath)
   const pub = publicRaw(key)
+  // QA-режим подписывает только тестовым ключом: файл с выдуманной версией, подписанный ключом выпуска, принял бы любой стенд
+  if (opts.from && programKeys(opts.keysFile)?.includes(pub)) {
+    throw new SignError('--from (QA) подписывает только тестовым ключом: этот ключ зашит в internal/update/keys.go. Возьмите --key .gotmp/release-test-key.pem (создаёт --test-key)', 2)
+  }
 
   const work = path.join(opts.work, opts.tag)
   fs.rmSync(work, { recursive: true, force: true })
@@ -327,6 +483,9 @@ export function signRelease(opts, deps) {
     checkDraftAssets(sums, names)
   }
 
+  // поля манифеста — до долгой пересборки: метки нет локально или порог Go не в таблице — отказ сразу
+  const osFields = opts.from ? { minOS: opts.minOS, lastOn: opts.lastOn } : releaseFields(opts.tag, version, deps)
+
   if (!opts.skipRebuild) {
     // независимая сверка: установщик собран здесь из метки, а не взят на веру у CI (design §5.4, §10)
     const rebuilt = deps.rebuild({ tag: opts.tag, version, work, bmpMtime: opts.bmpMtime })
@@ -339,7 +498,7 @@ export function signRelease(opts, deps) {
   if (wn.version !== version) throw new SignError(`WHATS_NEW_VERSION ${wn.version} в метке ${opts.tag}, ждали ${version}: «Что нового» от другого выпуска`)
   const date = opts.date ?? deps.git(['show', '-s', '--format=%cs', `${opts.tag}^{commit}`]).toString().trim()
 
-  const body = buildBody({ version, date, minAuto: opts.minAuto ?? DEFAULT_MIN_AUTO, notes: wn.notes, setup: { name, size: data.length, sha256: hash } })
+  const body = buildBody({ version, date, minAuto: opts.minAuto ?? DEFAULT_MIN_AUTO, notes: wn.notes, setup: { name, size: data.length, sha256: hash }, ...osFields })
   const env = sealEnvelope(body, key)
   const text = JSON.stringify(env) + '\n'
   if (Buffer.byteLength(text) > MAX_ENVELOPE) throw new SignError(`конверт ${Buffer.byteLength(text)} байт, больше ${MAX_ENVELOPE}: программа его не примет`)
@@ -354,7 +513,7 @@ export function signRelease(opts, deps) {
   fs.writeFileSync(file, text)
   const uploaded = !opts.dry && real
   if (uploaded) deps.gh(['release', 'upload', opts.tag, file, '--clobber']) // --clobber: повторная подпись черновика заменяет прежний файл
-  return { file, version, size: data.length, sha256: hash, uploaded, notes: body.notes.length }
+  return { file, version, size: data.length, sha256: hash, uploaded, notes: body.notes.length, minOS: body.minOS, lastOn: body.lastOn }
 }
 
 // ---- CLI ----
@@ -388,6 +547,17 @@ export function testKeyPath(next, rootDir = root) {
 const arg = (argv, name, def) => {
   const i = argv.indexOf(name)
   return i >= 0 ? argv[i + 1] : def
+}
+
+/** Все значения повторяемого флага; флаг без значения (последний или перед другим флагом) — отказ с кодом 2. */
+export function argAll(argv, name) {
+  const out = []
+  argv.forEach((a, i) => {
+    if (a !== name) return
+    if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) throw new SignError(`${name}: не указано значение`, 2)
+    out.push(argv[i + 1])
+  })
+  return out
 }
 
 // Сбой внешней команды — отказ с её именем, без стека; вывод команды (причина) идёт в stderr как есть
@@ -425,15 +595,18 @@ function main(argv) {
     return
   }
   const tag = argv.find((a, i) => /^v\d/.test(a) && (i === 0 || !argv[i - 1].startsWith('--')))
-  if (!tag) throw new SignError('использование: node scripts/release-sign.mjs vX.Y.Z [--key pem] [--dry] [--min-auto X.Y.Z] [--bmp-mtime сек] [--from папка --skip-rebuild] | --new-key <путь> | --test-key', 2)
+  if (!tag) throw new SignError('использование: node scripts/release-sign.mjs vX.Y.Z [--key pem] [--dry] [--min-auto X.Y.Z] [--bmp-mtime сек] [--from папка [--skip-rebuild] [--min-os darwin=13.0] [--last-on darwin:13.0=0.42.0]] | --new-key <путь> | --test-key', 2)
   // флаг без значения (последний или перед другим флагом) — отказ, а не молчаливое «не задано»
   const bi = argv.indexOf('--bmp-mtime')
   if (bi >= 0 && (bi + 1 >= argv.length || argv[bi + 1].startsWith('--'))) throw new SignError('--bmp-mtime: не указано значение (unix-секунды)', 2)
   const bmpMtime = parseBmpMtime(arg(argv, '--bmp-mtime', process.env.SA_INSTALLER_BMP_MTIME))
+  const { minOS, lastOn } = parseOsFlags(argAll(argv, '--min-os'), argAll(argv, '--last-on'))
   const r = signRelease(
     {
       tag,
       bmpMtime,
+      minOS,
+      lastOn,
       keyPath: path.resolve(arg(argv, '--key', path.join(root, 'docs', 'private', 'release-key.pem'))),
       dry: argv.includes('--dry'),
       skipRebuild: argv.includes('--skip-rebuild'),
@@ -446,7 +619,7 @@ function main(argv) {
     },
     realDeps,
   )
-  console.log(`${ASSET}: версия ${r.version}, установщик ${r.size} байт, sha256 ${r.sha256.slice(0, 12)}…, строк «Что нового» ${r.notes}`)
+  console.log(`${ASSET}: версия ${r.version}, установщик ${r.size} байт, sha256 ${r.sha256.slice(0, 12)}…, строк «Что нового» ${r.notes}, minOS ${JSON.stringify(r.minOS ?? null)}, lastOn ${JSON.stringify(r.lastOn ?? null)}`)
   console.log(r.uploaded ? `загружен в ${tag}` : `не загружен (${argv.includes('--dry') ? '--dry' : 'QA-режим'}): ${r.file}`)
 }
 

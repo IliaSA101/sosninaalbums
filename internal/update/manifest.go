@@ -45,6 +45,12 @@ type Manifest struct {
 	MinAuto string // с этой версии автообновление безопасно; пусто — с любой
 	Notes   []string
 	Setup   *File
+	// MinOS — «GOOS → минимальная версия системы выпуска» (только верные значения); LastOn — лестницы
+	// «GOOS → {порог системы → последняя версия программы для систем ниже порога}» (design §2).
+	MinOS  map[string]string
+	LastOn map[string]map[string]string
+	// Skipped — имена неверных полей чужой ОС (minOS.windows): пропущены, служба пишет их в log.txt.
+	Skipped []string
 }
 
 // SetupName — имя установщика Windows для версии ver; "" — ver не x.y.z. Имя на диске и в
@@ -60,8 +66,10 @@ func SetupName(ver string) string {
 // ErrManifest; version и minAuto — x.y.z; notes — не больше 8 строк, каждая очищена и ≤ 300
 // знаков; запись Windows — имя ровно SetupName(version), размер MinSetup…MaxSetup, sha256
 // hex-64 нижним регистром (неверная запись — отказ всего файла, а не молчаливое «без неё»).
-// Лишние поля пропускаются.
-func Parse(body []byte) (Manifest, error) {
+// minOS и lastOn — правила минимальной системы (rules.go): ошибка в ключе goos — ErrManifest,
+// в ключе другой ОС — пропуск (Skipped); goos == "" — все ключи строго. Лишние поля и неизвестные
+// ключи пропускаются: 0.25–0.39 читают тело с новыми полями так же (TestOldParseCompat).
+func Parse(body []byte, goos string) (Manifest, error) {
 	if len(body) > maxBody {
 		return Manifest{}, ErrManifest
 	}
@@ -73,6 +81,8 @@ func Parse(body []byte) (Manifest, error) {
 		MinAuto string          `json:"minAuto"`
 		Notes   []string        `json:"notes"`
 		Files   map[string]File `json:"files"`
+		MinOS   json.RawMessage `json:"minOS"`
+		LastOn  json.RawMessage `json:"lastOn"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return Manifest{}, ErrManifest
@@ -89,7 +99,12 @@ func Parse(body []byte) (Manifest, error) {
 	if _, ok := ParseVersion(raw.MinAuto); raw.MinAuto != "" && !ok {
 		return Manifest{}, ErrManifest
 	}
-	m := Manifest{Version: raw.Version, Date: CleanText(raw.Date, 10), MinAuto: raw.MinAuto, Notes: []string{}}
+	r, err := parseRules(raw.MinOS, raw.LastOn, raw.Version, goos, knownOS)
+	if err != nil {
+		return Manifest{}, err
+	}
+	m := Manifest{Version: raw.Version, Date: CleanText(raw.Date, 10), MinAuto: raw.MinAuto, Notes: []string{},
+		MinOS: r.minOS, LastOn: r.lastOn, Skipped: r.skipped}
 	for _, n := range raw.Notes {
 		if len(m.Notes) == maxNotes {
 			break

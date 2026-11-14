@@ -63,6 +63,7 @@ func (s *Store) RemovePack(id string, keep func(key string) bool) (PackRemove, e
 	}
 	s.mu.Lock()
 	s.packs = slices.DeleteFunc(s.packs, func(r *packReg) bool { return r == reg })
+	s.rebuildThemes() // его темы уходят, общие переходят к следующему объявившему
 	s.mu.Unlock()
 	return s.collect(reg.Items, keep, nil, false), nil
 }

@@ -11,21 +11,23 @@ import (
 type srcItem struct {
 	File  string `json:"file"`
 	Kind  string `json:"kind"`
-	Theme string `json:"theme"`
+	Theme string `json:"theme"`           // база: её видят 0.29–0.39
+	Topic string `json:"topic,omitempty"` // id объявленной темы набора (спека 170)
 	Name  string `json:"name"`
 }
 
 type srcManifest struct {
-	ID      string    `json:"id"`
-	Version int       `json:"version"`
-	MinApp  string    `json:"minApp"`
-	Title   string    `json:"title"`
-	About   string    `json:"about"`
-	Author  string    `json:"author"`
-	License string    `json:"license"`
-	Source  string    `json:"source"`
-	Needs   string    `json:"needs,omitempty"`
-	Items   []srcItem `json:"items"`
+	ID      string      `json:"id"`
+	Version int         `json:"version"`
+	MinApp  string      `json:"minApp"`
+	Title   string      `json:"title"`
+	About   string      `json:"about"`
+	Author  string      `json:"author"`
+	License string      `json:"license"`
+	Source  string      `json:"source"`
+	Needs   string      `json:"needs,omitempty"`
+	Themes  []ThemeDecl `json:"themes,omitempty"` // объявления с подставленными базой и порядком
+	Items   []srcItem   `json:"items"`
 }
 
 // licenseText — LICENSE.txt набора: CC0 1.0 и происхождение картинок. Условия сервиса ИИ на дату
@@ -47,8 +49,11 @@ dedicated to the public domain under CC0 1.0. Credit to Sosnina Albums is welcom
 func (r *runner) writeManifest() error {
 	m := srcManifest{ID: r.rec.ID, Version: r.rec.Version, MinApp: r.rec.MinApp, Title: r.rec.Title, About: r.rec.About,
 		Author: r.rec.Author, License: r.rec.License, Source: r.rec.Source, Needs: r.rec.Needs}
+	for _, d := range r.rec.Themes {
+		m.Themes = append(m.Themes, d.resolved())
+	}
 	for _, o := range r.outs {
-		m.Items = append(m.Items, srcItem{File: o.File, Kind: ManifestKind(o.Kind), Theme: o.Theme, Name: o.Name})
+		m.Items = append(m.Items, srcItem{File: o.File, Kind: ManifestKind(o.Kind), Theme: o.Theme, Topic: o.Topic, Name: o.Name})
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {

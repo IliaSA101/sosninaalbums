@@ -126,9 +126,14 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 	own := make([]entry, 0, len(s.entries))
 	for _, e := range s.entries {
 		if _, ok := s.files[kind][e.Key]; ok && e.Kind == kind && !e.Hidden {
-			own = append(own, *e)
+			c := *e
+			if !s.ownThemeL(c.Theme) {
+				c.Theme = ThemeMine // темы набора нет (удалён): показ в «Моих», запись и файл прежние (170-4)
+			}
+			own = append(own, c)
 		}
 	}
+	rows := s.themeRows() // таблица не правится на месте: после RUnlock её можно читать
 	packs := s.packItems(kind)
 	var fresh map[string]bool
 	// «Новые» есть и у макетов (163, владелец 03.11: отмена 0.28-133-67); часы — один вызов на каталог и только при наборах.
@@ -156,9 +161,15 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 	if len(cat.New) > 0 { // «Новые» — первой строкой и только при предметах
 		cat.Themes = append(cat.Themes, Theme{ID: ThemeNew, Name: "Новые", Count: len(cat.New)})
 	}
-	for _, t := range themeList {
-		// Пустые темы скрыты; «Все» и «Мои» (подсказка «Загрузите свои…») есть всегда.
-		if count[t.id] > 0 || t.id == ThemeAll || t.id == ThemeMine {
+	for _, t := range themeList[:2] { // выборки «Недавние», «Все»
+		if count[t.id] > 0 || t.id == ThemeAll {
+			cat.Themes = append(cat.Themes, Theme{ID: t.id, Name: t.name, Count: count[t.id]})
+		}
+	}
+	for _, t := range rows {
+		// Пустые темы скрыты, в том числе пустая база: её темы наборов остаются на месте (170-22);
+		// «Все» и «Мои» (подсказка «Загрузите свои…») есть всегда.
+		if count[t.id] > 0 || t.id == ThemeMine {
 			cat.Themes = append(cat.Themes, Theme{ID: t.id, Name: t.name, Count: count[t.id]})
 		}
 	}

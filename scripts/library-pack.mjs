@@ -31,13 +31,17 @@
 // PackLimit; жёсткий предел MaxZip 300 МБ). Новый id (его нет в --catalog) — только с minApp не ниже 0.29.0: клиенты
 // 0.17–0.28 такие строки пропускают, а не заполняют ими библиотеку (0.29-137-27). Первый набор нового каталога
 // (--new) и повторный выпуск старого набора — без этого правила. manifest.src.json `needs: "<id донора>"` -> поле `needs` строки каталога (minApp от 0.27.0);
-// донор обязан быть в каталоге и стоять в нём раньше (порядок строк = порядок установки).
+// донор обязан быть в каталоге; стоит он ниже строки новой версии — строка (с зависимыми от неё по needs, транзитивно)
+// переезжает в конец каталога, после донора (порядок строк = порядок установки; 170-32). Цикл needs — отказ.
 // Макет альбома (kind album, .json ≤ 512 КБ): id набора на `-layouts`, minApp не ниже 0.28.0; путь записи прежней
 // версии обязан остаться в новой (иначе альбомы не найдут макет), кроме явного --drop.
 // Стикер — сторона до 4096 px, фон — до 100 Мп (по заголовку PNG/JPEG, без декодирования).
 // --sheets <папка>: лист образцов набора (спека 144) — `<id>-<версия>-preview.jpg` и `.json` из `library-verify -sprite -out`;
 // в строку каталога идёт поле `preview` (sha256 и размер считает скрипт), проверки и режим `--preview-only <id>=<zip>`
 // для вышедших наборов (архив не меняется) — library-pack-preview.mjs. Без --sheets строка без `preview`.
+// Темы набора (спека 170): manifest.src.json `themes` (объявления) и `topic` предмета; правила и сверка с прежним каталогом
+// (--catalog: один id — одно имя и база, разные id — разные имена) — library-pack-themes.mjs; `theme` предмета = база темы,
+// в строку каталога идёт список объявлений `themes` ([{id,name,base}]), minApp из-за тем не поднимается.
 // Пример темы в программе (спека 142): --zip-only, --snapshot, --demo-keys без каталога и ключа, резерв id и страж ключей — library-pack-demo.mjs.
 //
 // Закрытый ключ (по умолчанию docs/private/library-key.pem, вне git) в вывод не печатается.
@@ -47,6 +51,7 @@ import path from 'node:path'
 import zlib from 'node:zlib'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { checkDemoPack, demoMain, isDemoCmd, readDemoKeys } from './library-pack-demo.mjs'
+import { checkCatalogThemes, checkMirror, srcThemes, themeRow } from './library-pack-themes.mjs'
 import { checkBody, isPreviewCmd, previewField, previewMain, readSheet } from './library-pack-preview.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -306,6 +311,7 @@ export function buildPack(dir, { zipOnly = false } = {}) {
   if (!/^\d+\.\d+\.\d+$/.test(src.minApp ?? '')) throw new Error('minApp — x.y.z')
   if (!src.title) throw new Error('нет title')
   if (!Array.isArray(src.items) || src.items.length < 1 || src.items.length > 1000) throw new Error('items 1…1000')
+  const themes = srcThemes(src) // до чтения файлов: ошибка рецепта темы — первой
   const seen = new Set()
   const files = []
   const items = src.items.map((it) => {
@@ -337,7 +343,7 @@ export function buildPack(dir, { zipOnly = false } = {}) {
       checkAlbumFile(it.file, data)
     }
     files.push({ name: it.file, data })
-    return { file: it.file, kind: it.kind, theme: it.theme ?? 'basic', name: it.name, sha256: sha256(data), size: data.length }
+    return { file: it.file, kind: it.kind, theme: it.theme ?? 'basic', ...(it.topic === undefined ? {} : { topic: it.topic }), name: it.name, sha256: sha256(data), size: data.length }
   })
   let needs
   if (src.needs !== undefined) {
@@ -356,8 +362,10 @@ export function buildPack(dir, { zipOnly = false } = {}) {
     author: src.author ?? '',
     license: src.license ?? '',
     source: src.source ?? '',
+    ...(themes.length > 0 ? { themes } : {}),
     items,
   }
+  checkMirror(manifest)
   const mdata = Buffer.from(JSON.stringify(manifest, null, 2) + '\n')
   if (mdata.length > 256 << 10) throw new Error('манифест больше 256 КБ')
   const lic = path.join(dir, 'LICENSE.txt')
@@ -403,7 +411,7 @@ export function readPrev(zipBuf) {
 /**
  * Проверки выпуска против прежнего каталога (до записи любых файлов). Набор уже в каталоге — --prev обязателен
  * (иначе заморозка ключей по желанию), его id совпадает, а sha256 — со строкой каталога. Донор `needs` есть в
- * каталоге и стоит раньше этой строки (новая встанет в конец, прежняя остаётся на месте).
+ * каталоге (стоит ниже прежней строки — upsertCatalog перенесёт её в конец) и не зависит от набора (цикл — отказ).
  */
 export function checkPublish(base, manifest, needs, prev, drops = []) {
   const packs = base?.packs ?? []
@@ -412,6 +420,7 @@ export function checkPublish(base, manifest, needs, prev, drops = []) {
   if (base && !row && verNum(manifest.minApp) < verNum(WAVE2_MIN_APP.join('.'))) {
     throw new Error(`новый набор ${manifest.id} (его нет в каталоге) требует minApp не ниже ${WAVE2_MIN_APP.join('.')}, а в манифесте ${manifest.minApp}: клиенты 0.17–0.28 иначе скачают его целиком и заполнят библиотеку`)
   }
+  checkCatalogThemes(manifest.themes ?? [], packs, manifest.id)
   if (row && !prev) throw new Error(`в каталоге уже есть ${manifest.id} v${row.version}: нужен --prev <опубликованный zip> (заморозка ключей)`)
   if (prev) {
     if (prev.manifest.id !== manifest.id) throw new Error(`--prev: архив набора ${prev.manifest.id}, а собирается ${manifest.id}`)
@@ -421,7 +430,8 @@ export function checkPublish(base, manifest, needs, prev, drops = []) {
   if (needs) {
     const donor = packs.findIndex((p) => p.id === needs)
     if (donor < 0) throw new Error(`needs: донора ${needs} нет в каталоге: сначала выпустите его`)
-    if (donor > (at >= 0 ? at : packs.length)) throw new Error(`needs: донор ${needs} стоит в каталоге после ${manifest.id}: порядок строк — порядок установки`)
+    // донор ниже — не отказ: upsertCatalog перенесёт строку в конец; отказ только при цикле (донор сам зависит от набора)
+    if (at >= 0 && dependentsOf(packs, manifest.id).some((p) => p.id === needs)) throw new Error(`needs: донор ${needs} сам зависит от ${manifest.id}: цикл needs`)
   }
 }
 
@@ -458,22 +468,43 @@ export function catalogRow(manifest, zip, tag, needs) {
     url,
     counts,
     ...(needs ? { needs } : {}),
+    ...(manifest.themes?.length ? { themes: themeRow(manifest.themes) } : {}),
   }
 }
 
-/** Добавляет/заменяет строку по id; возвращает новый каталог. Старее стоящей версии — отказ. Порядок не сортируется: прежняя строка остаётся на месте, новая — в конец. Прочие поля прежнего каталога (videos — ролики F1, 140) переносятся как есть: публикация набора их не трогает. */
+/** Строки, зависящие от набора id по needs (транзитивно), в порядке каталога; сам id не входит. */
+export function dependentsOf(packs, id) {
+  const set = new Set([id])
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const p of packs) {
+      if (p.needs && set.has(p.needs) && !set.has(p.id)) {
+        set.add(p.id)
+        grew = true
+      }
+    }
+  }
+  return packs.filter((p) => p.id !== id && set.has(p.id))
+}
+
+/** Добавляет/заменяет строку по id; возвращает новый каталог. Старее стоящей версии — отказ. Порядок не сортируется: прежняя строка остаётся на месте, новая — в конец; исключение — заменённая строка с донором ниже: она и её зависимые (needs, транзитивно) переезжают в конец, чтобы донор стоял раньше (170-32). Прочие поля прежнего каталога (videos — ролики F1, 140) переносятся как есть: публикация набора их не трогает. */
 export function upsertCatalog(cat, row, seq) {
   const packs = [...(cat?.packs ?? [])]
   const i = packs.findIndex((p) => p.id === row.id)
   if (i >= 0 && packs[i].version > row.version) throw new Error(`в каталоге версия ${packs[i].version} новее ${row.version}`)
   if (i >= 0) packs[i] = row
   else packs.push(row)
+  let ordered = packs
+  if (i >= 0 && row.needs && packs.findIndex((p) => p.id === row.needs) > i) {
+    const moved = new Set([row.id, ...dependentsOf(packs, row.id).map((p) => p.id)])
+    ordered = [...packs.filter((p) => !moved.has(p.id)), ...packs.filter((p) => moved.has(p.id))]
+  }
   if (packs.length > 500) throw new Error('в каталоге больше 500 наборов')
   const prev = Number.isInteger(cat?.seq) && cat.seq > 0 ? cat.seq : 0
   seq ??= prev + 1
   if (!Number.isInteger(seq) || seq <= 0) throw new Error('seq должен быть целым > 0')
   if (cat && seq <= prev) throw new Error(`seq ${seq} должен быть больше seq прежнего каталога (${prev})`)
-  return { ...cat, format: 1, seq, packs }
+  return { ...cat, format: 1, seq, packs: ordered }
 }
 
 /** Прежний каталог обязателен: без файла — отказ, если не задан явный --new (тогда каталог начинается с seq 1). */

@@ -219,4 +219,15 @@ describe('UpdateBlock: кнопки зовут Go', () => {
     set({ phase: 'latest', mode: 'install' })
     expect(document.body.textContent).not.toContain('Поставьте установщиком')
   })
+
+  it('блокировка по системе: строка и подсказка вместо «Поставьте установщиком», без «Скачать» и «Обновить»; щелчок по «Проверить» зовёт Go', async () => {
+    render(UpdateBlock)
+    set({ phase: 'latest', mode: 'setup', os: 'darwin', osNeed: '13.0', blocked: '0.43.0' })
+    expect(screen.getByRole('status').textContent).toBe('Эта версия — последняя для вашей системы')
+    expect(document.body.textContent).toContain('Для версии 0.43.0 и следующих нужна macOS 13 или новее')
+    expect(document.body.textContent).not.toContain('Поставьте установщиком')
+    expect(screen.queryByRole('button', { name: /Скачать|Обновить$/ })).toBeNull()
+    await fireEvent.click(btn('Проверить обновления'))
+    expect(go.CheckUpdate).toHaveBeenCalledTimes(1)
+  })
 })

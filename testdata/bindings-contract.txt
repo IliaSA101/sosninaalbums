@@ -833,6 +833,10 @@ type APP.UpdateInfo
   checked: number
   just: string
   failed: string
+  os: string
+  osNeed: string
+  blocked: string
+  last: string
 type collect.Info
   photos: number
   extra: number

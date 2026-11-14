@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -350,7 +351,13 @@ func decorManifest(m pack.Manifest) decor.PackManifest {
 	out := decor.PackManifest{ID: m.ID, Version: m.Version, MinApp: m.MinApp, Title: m.Title, About: m.About, Author: m.Author,
 		License: m.License, Source: m.Source, Items: make([]decor.PackItem, len(m.Items))}
 	for i, it := range m.Items {
-		out.Items[i] = decor.PackItem{File: it.File, Kind: it.Kind, Theme: it.Theme, Name: it.Name, Size: it.Size}
+		out.Items[i] = decor.PackItem{File: it.File, Kind: it.Kind, Theme: it.Theme, Name: it.Name, Topic: it.Topic, Size: it.Size}
+	}
+	for _, t := range m.Themes {
+		out.Themes = append(out.Themes, decor.PackTheme{ID: t.ID, Name: t.Name, Base: t.Base, Order: t.Order})
+	}
+	if note := m.ThemeSkips.Note(m.ID); note != "" { // одна строка на набор (170-30); тема не принята — набор всё равно встаёт
+		log.Print("библиотека: " + note)
 	}
 	return out
 }

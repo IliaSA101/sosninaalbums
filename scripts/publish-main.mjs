@@ -12,7 +12,7 @@ import { filterIndex, isExcluded, parseExclude } from './public-tree.mjs'
 const args = process.argv.slice(2)
 const flag = (f) => args.includes(f)
 // `--only <путь>…` — служебный коммит поверх main: из <ref> берутся только указанные файлы/папки,
-// остальное дерево — как в main (docs/specs/archive/0.10/029-install-guide/design.md §2).
+// остальное дерево — как в main (docs/specs/archive/0.10-0.14.1/0.10/029-install-guide/design.md §2).
 const onlyAt = args.indexOf('--only')
 const only = []
 if (onlyAt >= 0) {

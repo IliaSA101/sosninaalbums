@@ -58,9 +58,6 @@ func (it Item) validate() error {
 	if err := it.checkSrc(); err != nil {
 		errs = append(errs, err)
 	}
-	if it.Theme != "" && !themeSet[it.Theme] {
-		add("theme %q: нужна тема библиотеки", it.Theme)
-	}
 	if it.Family != "" && !validFamily(it.Family) {
 		add("family %q: строчные латиница, цифры и «-», до 40 знаков", it.Family)
 	}

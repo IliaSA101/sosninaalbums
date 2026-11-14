@@ -21,6 +21,13 @@ export const LIMITS = Object.freeze({
   tplV: 1,
   lookV: 1,
   maxLookSteps: 24,
+  maxThemes: 16, // объявлений тем в наборе (pack/themes.go): принимаются первые
+  maxThemesRaw: 4096, // сырой отрезок `themes` в манифесте, байт
+  maxThemeName: 20,
+  maxPackThemes: 64, // тем наборов в программе: решает таблица decor
+  themeOrderMin: 1,
+  themeOrderMax: 99,
+  themeOrderDef: 50,
 })
 
 export const E = {

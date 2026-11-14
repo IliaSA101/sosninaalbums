@@ -2,7 +2,17 @@ import { store } from '../../base/core/store.svelte'
 import { capFirst, errText } from '../../base/words/errtext'
 import { STAND_LINK_TEXT } from '../dialogs/about.svelte'
 import { NO_UPDATE, UpdateGo, type UpdateInfo, type UpdateProgress } from './updateapi'
-import { PAGE_LABEL, WHATS_NEW_LABEL, failedText, justText, offerToast, readyToast, startedText, type UpdateAct } from './updatetext'
+import {
+  PAGE_LABEL,
+  WHATS_NEW_LABEL,
+  failedText,
+  justText,
+  lastToast,
+  offerToast,
+  readyToast,
+  startedText,
+  type UpdateAct,
+} from './updatetext'
 
 // Что нужно обновлению от верха программы (хук ставит UpdateWatch; тесту хватает пустого).
 export interface UpdateHost {
@@ -20,11 +30,12 @@ export class UpdateUi {
   private dl = false // наш DownloadUpdate ещё не вернулся
   private installing = false
   private offerShown = '' // версия, о которой тост уже был (событие и опрос при запуске не дублируются)
+  private lastShown = '' // версия, о которой тост «последняя для вашей системы» уже был (то же: событие и опрос)
 
   // Принять состояние от Go (ответ метода или update:state). Первое «готово» — тост «Перезапустить».
   take(next: UpdateInfo) {
     const was = this.info.phase
-    this.info = { ...NO_UPDATE, ...next }
+    this.info = { ...next }
     // Go присылает ошибку со строчной буквы (как errText).
     if (next.phase === 'error') this.info.error = capFirst(this.info.error)
     if (next.phase !== 'downloading') this.cancelling = false
@@ -49,6 +60,17 @@ export class UpdateUi {
     else if (i.just) store.notify(justText(i.just), 'info', { label: WHATS_NEW_LABEL, run: () => this.host.whatsNew() })
     // Проверка при запуске могла кончиться раньше, чем интерфейс подписался на update:offer: тост показываем по опросу.
     else if (i.atStart && i.phase === 'available') this.offered(i)
+    // Так же для update:last (171): Go отдаёт Last и в Info(), и событием.
+    else if (i.last) this.lastTold(i)
+  }
+
+  // update:last — проверка при запуске нашла версию, которой нужна система новее нашей. Тост без кнопки, раз на версию.
+  lastTold(i: UpdateInfo) {
+    if (!i.last) return
+    this.take(i)
+    if (this.lastShown === i.last) return
+    this.lastShown = i.last
+    store.notify(lastToast(i))
   }
 
   // update:offer — проверка при запуске нашла новее.

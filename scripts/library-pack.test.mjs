@@ -7,7 +7,8 @@ import path from 'node:path'
 import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { MAX_ZIP, MAX_ZIP_WAVE2, zipLimit, assertZipSize, buildPack, checkAlbumFile, catalogRow, checkSpreadFile, checkPrev, checkPublish, imageInfo, jpegSize, makeZip, orderWarnings, publicRaw, readCatalogFile, readPrev, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
+import { replacePreviews } from './library-pack-preview.mjs'
+import { MAX_ZIP, MAX_ZIP_WAVE2, zipLimit, assertZipSize, buildPack, checkAlbumFile, catalogRow, checkSpreadFile, checkPrev, checkPublish, dependentsOf, imageInfo, jpegSize, makeZip, orderWarnings, publicRaw, readCatalogFile, readPrev, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
 
 function setDir() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'libpack-'))
@@ -646,12 +647,37 @@ test('checkPublish: needs — донор в каталоге и раньше п�
   assert.doesNotThrow(() => checkPublish(cat, addon, 'donor-set', undefined))
   assert.throws(() => checkPublish(cat, addon, 'ghost-set', undefined), /донора ghost-set нет в каталоге/)
   assert.throws(() => checkPublish(null, addon, 'donor-set', undefined), /донора donor-set нет/)
-  // дополнение уже стоит раньше донора: переставить строки нельзя
+  // дополнение уже стоит раньше донора: не отказ, строка переедет в конец (170-32); отказ — только цикл needs
   const early = upsertCatalog(upsertCatalog(null, row('addon-set')), row('donor-set'))
   const prev = readPrev(zip)
   const early2 = { ...early, packs: early.packs.map((p) => (p.id === 'addon-set' ? { ...p, sha256: prev.sha256 } : p)) }
-  assert.throws(() => checkPublish(early2, { ...addon, items: manifest.items }, 'donor-set', { ...prev, manifest: { ...manifest, id: 'addon-set' } }), /после addon-set/)
+  const prevAddon = { ...prev, manifest: { ...manifest, id: 'addon-set' } }
+  assert.doesNotThrow(() => checkPublish(early2, { ...addon, items: manifest.items }, 'donor-set', prevAddon))
+  const loop = { ...early2, packs: early2.packs.map((p) => (p.id === 'donor-set' ? { ...p, needs: 'addon-set' } : p)) }
+  assert.throws(() => checkPublish(loop, { ...addon, items: manifest.items }, 'donor-set', prevAddon), /цикл needs/)
   assert.doesNotThrow(() => checkPublish(cat, addon, 'other-set', undefined))
+})
+
+test('upsertCatalog (170-32): новая версия с донором ниже — строка и её зависимые переезжают в конец, после донора', () => {
+  const { manifest, files } = buildPack(setDir())
+  const zip = makeZip(files)
+  const row = (id, needs, version = 1) => catalogRow({ ...manifest, id, version }, zip, `${id}.zip`, needs)
+  const ids = (c) => c.packs.map((p) => `${p.id}:${p.version}`)
+  let cat = null
+  for (const [id, needs] of [['a-first'], ['code'], ['code-layouts', 'code'], ['code-extra', 'code-layouts'], ['z-other'], ['water']]) cat = upsertCatalog(cat, row(id, needs))
+  assert.deepEqual(dependentsOf(cat.packs, 'code').map((p) => p.id), ['code-layouts', 'code-extra'])
+  assert.deepEqual(dependentsOf(cat.packs, 'water'), [])
+  assert.deepEqual(dependentsOf(null ?? [], 'code'), [])
+  // v2 кода получает донора water (ниже): code, code-layouts, code-extra — в конец, в прежнем порядке
+  const moved = upsertCatalog(cat, row('code', 'water', 2))
+  assert.deepEqual(ids(moved), ['a-first:1', 'z-other:1', 'water:1', 'code:2', 'code-layouts:1', 'code-extra:1'])
+  assert.deepEqual(orderWarnings(moved), [])
+  assert.equal(moved.seq, cat.seq + 1)
+  // донор уже выше — позиция не меняется; без needs — тоже
+  assert.deepEqual(ids(upsertCatalog(cat, row('code', 'a-first', 2))), ['a-first:1', 'code:2', 'code-layouts:1', 'code-extra:1', 'z-other:1', 'water:1'])
+  assert.deepEqual(ids(upsertCatalog(cat, row('code', undefined, 2))), ['a-first:1', 'code:2', 'code-layouts:1', 'code-extra:1', 'z-other:1', 'water:1'])
+  // исходный каталог не изменён
+  assert.deepEqual(ids(cat), ['a-first:1', 'code:1', 'code-layouts:1', 'code-extra:1', 'z-other:1', 'water:1'])
 })
 
 test('orderWarnings: дополнение раньше донора — предупреждение; порядок донор → дополнение, без needs и без каталога — тихо', () => {
@@ -753,6 +779,38 @@ test('CLI: needs без донора в каталоге — отказ, пап�
   assert.deepEqual(e.catalog().packs.map((p) => `${p.id}${p.needs ? '>' + p.needs : ''}`), ['donor-set', 'addon-set>donor-set'])
 })
 
+test('CLI (170-32): v2 с needs на донора ниже — строка переезжает в конец, --prev и заморозка ключей действуют, зависимый макет после неё', () => {
+  const e = cliEnv()
+  assert.equal(e.run(cliSet('code-set', 1, { minApp: '0.29.0' }), '--new').code, 0)
+  assert.equal(e.run(cliSet('layouts-set', 1, { minApp: '0.29.0', needs: 'code-set' })).code, 0)
+  assert.equal(e.run(cliSet('water-set', 1, { minApp: '0.29.0' })).code, 0)
+  const rows = () => e.catalog().packs.map((p) => `${p.id}:${p.version}${p.needs ? '>' + p.needs : ''}`)
+  assert.deepEqual(rows(), ['code-set:1', 'layouts-set:1>code-set', 'water-set:1'])
+  const prevZip = path.join(e.out, 'code-set-1.zip')
+  const v2 = (extra = {}) => cliSet('code-set', 2, { minApp: '0.29.0', needs: 'water-set', ...extra })
+  // без --prev — отказ до записи, каталог не тронут
+  const before = fs.readFileSync(path.join(e.out, 'catalog.json'), 'utf8')
+  const noPrev = e.run(v2())
+  assert.equal(noPrev.code, 1)
+  assert.match(noPrev.text, /нужен --prev/)
+  // потеря ключа картинки — отказ, как раньше
+  const lost = v2()
+  fs.rmSync(path.join(lost, 'bg', 'one.png'))
+  fs.writeFileSync(path.join(lost, 'bg', 'two.png'), pngStub(32, 32, true))
+  const m = JSON.parse(fs.readFileSync(path.join(lost, 'manifest.src.json'), 'utf8'))
+  m.items = m.items.map((it) => (it.file === 'bg/one.png' ? { ...it, file: 'bg/two.png' } : it))
+  fs.writeFileSync(path.join(lost, 'manifest.src.json'), JSON.stringify(m))
+  const dropped = e.run(lost, '--prev', prevZip)
+  assert.equal(dropped.code, 1, dropped.text)
+  assert.match(dropped.text, /пропали ключи прежней/)
+  assert.equal(fs.readFileSync(path.join(e.out, 'catalog.json'), 'utf8'), before)
+  // штатно: code-set и зависимый макет — после донора
+  const ok = e.run(v2(), '--prev', prevZip)
+  assert.equal(ok.code, 0, ok.text)
+  assert.deepEqual(rows(), ['water-set:1', 'code-set:2>water-set', 'layouts-set:1>code-set'])
+  assert.doesNotMatch(ok.text, /предупреждение: дополнение/)
+})
+
 test('CLI: отказ по содержимому набора и по ключам — до записи; булев ключ перед папкой; неизвестный ключ и ключ без значения', () => {
   const e = cliEnv()
   const bad = rasterSet(pngStub(100, 100), pngStub(4097, 10))
@@ -786,4 +844,85 @@ test('CLI (0.30-wave2-1): новый id с низким minApp в готовом
   const rep = e.run(cliSet('my-set', 2), '--prev', path.join(e.out, 'my-set-1.zip')) // повторный выпуск старого — с minApp 0.16.0
   assert.equal(rep.code, 0, rep.text)
   assert.deepEqual(e.catalog().packs.map((p) => `${p.id}:${p.version}:${p.minApp}`), ['my-set:2:0.16.0', 'wave2-set:1:0.29.0'])
+})
+
+// ---- темы набора (спека 170, design §6) ----
+
+const NEWYEAR = { id: 'newyear', name: 'Новый год', base: 'holiday', order: 10 }
+/** Набор с темой «Новый год»: фон в ней, шаблон разворота — без темы набора. */
+const themedExtra = (themes = [NEWYEAR], topic = 'newyear') => ({
+  minApp: '0.29.0',
+  themes,
+  items: [
+    { file: 'bg/one.png', kind: 'bg', theme: 'holiday', topic, name: 'Один' },
+    { file: 'spreads/hero.json', kind: 'spread', name: 'Главное' },
+  ],
+})
+
+test('темы (170): themes и topic — в манифесте, список {id,name,base} — в строке каталога; круг через zip и каталог', () => {
+  const d = cliSet('holiday-newyear', 1, themedExtra())
+  const { manifest, files } = buildPack(d)
+  assert.deepEqual(manifest.themes, [NEWYEAR])
+  assert.deepEqual(manifest.items.map((it) => [it.theme, it.topic]), [['holiday', 'newyear'], ['basic', undefined]])
+  assert.equal(manifest.minApp, '0.29.0') // minApp из-за тем не поднимается
+  // порядок ключей в манифесте: themes перед items, topic между theme и name
+  assert.deepEqual(Object.keys(manifest).slice(-2), ['themes', 'items'])
+  assert.deepEqual(Object.keys(manifest.items[0]).slice(0, 4), ['file', 'kind', 'theme', 'topic'])
+  const zip = makeZip(files)
+  assert.deepEqual(JSON.parse(readZip(zip).get('manifest.json').toString()), manifest)
+  const row = catalogRow(manifest, zip, 'holiday-newyear-1.zip')
+  assert.deepEqual(row.themes, [{ id: 'newyear', name: 'Новый год', base: 'holiday' }]) // без order
+  const cat = upsertCatalog(null, row)
+  assert.deepEqual(readCatalogFromBody(sealCatalog(cat, crypto.generateKeyPairSync('ed25519').privateKey)).packs[0].themes, row.themes)
+  // без тем ни themes, ни topic, ни поля строки
+  const plain = buildPack(setDir())
+  assert.equal('themes' in plain.manifest, false)
+  assert.equal(plain.manifest.items.some((it) => 'topic' in it), false)
+  assert.equal('themes' in catalogRow(plain.manifest, zip, 'x.zip'), false)
+})
+
+/** Каталог из конверта (без проверки подписи). */
+const readCatalogFromBody = (env) => JSON.parse(Buffer.from(env.body, 'base64').toString('utf8'))
+
+test('темы (170): нарушение правил — отказ сборки; зеркало программы не вмешивается в набор без тем', () => {
+  for (const [extra, re] of [
+    [themedExtra([{ ...NEWYEAR, name: 'Пpаздник' }]), /имя/],
+    [themedExtra([NEWYEAR], 'ghost'), /topic "ghost" без объявления/],
+    [themedExtra([NEWYEAR, { id: 'extra', name: 'Лишняя', base: 'basic' }]), /тема "extra" объявлена, но ни один предмет/],
+    [{ ...themedExtra(), themes: [{ ...NEWYEAR, base: 'kids' }] }, /при topic "newyear": в theme идёт база темы \(kids\)/],
+  ]) assert.throws(() => buildPack(cliSet('holiday-newyear', 1, extra)), re)
+})
+
+test('темы (170): сверка с прежним каталогом в checkPublish — другой набор с тем же id и другим именем, с тем же именем и другим id', () => {
+  const mk = (themes, topic) => buildPack(cliSet('holiday-cake', 1, themedExtra(themes, topic))).manifest
+  const base = (themes) => ({ seq: 1, packs: [{ id: 'holiday-newyear', version: 1, minApp: '0.29.0', themes }] })
+  const prior = base([{ id: 'newyear', name: 'Новый год', base: 'holiday' }])
+  checkPublish(prior, mk([NEWYEAR]), undefined, null) // та же тема того же имени — второй набор допустим
+  assert.throws(() => checkPublish(prior, mk([{ ...NEWYEAR, name: 'Новогодний' }]), undefined, null), /один id — одно имя/)
+  assert.throws(() => checkPublish(prior, mk([{ id: 'ny', name: 'НОВЫЙ ГОД', base: 'holiday' }], 'ny'), undefined, null), /разные id — разные имена/)
+  checkPublish({ seq: 1, packs: [] }, mk([NEWYEAR]), undefined, null) // каталог без тем
+})
+
+test('CLI (170): набор с темами — выпуск; тема-двойник другого набора — отказ до записи, каталог не тронут; без тем — как раньше', () => {
+  const e = cliEnv()
+  assert.equal(e.run(cliSet('holiday-newyear', 1, themedExtra()), '--new').code, 0)
+  assert.deepEqual(e.catalog().packs[0].themes, [{ id: 'newyear', name: 'Новый год', base: 'holiday' }])
+  const before = { files: e.listing(), cat: fs.readFileSync(path.join(e.out, 'catalog.json'), 'utf8') }
+  const twin = e.run(cliSet('holiday-cake', 1, themedExtra([{ id: 'ny', name: 'Новый год', base: 'holiday' }], 'ny')))
+  assert.equal(twin.code, 1, twin.text)
+  assert.match(twin.text, /уже у темы "newyear" набора holiday-newyear/)
+  assert.deepEqual({ files: e.listing(), cat: fs.readFileSync(path.join(e.out, 'catalog.json'), 'utf8') }, before)
+  const plain = e.run(cliSet('wave2-plain', 1, { minApp: '0.29.0' }))
+  assert.equal(plain.code, 0, plain.text)
+  assert.equal('themes' in e.catalog().packs[1], false)
+})
+
+test('темы (170): --preview-only переносит themes строки как есть — меняется только preview', () => {
+  const { manifest, files } = buildPack(cliSet('holiday-newyear', 1, themedExtra()))
+  const row = catalogRow(manifest, makeZip(files), 'holiday-newyear-1.zip')
+  const base = { format: 1, seq: 4, packs: [row] }
+  const next = replacePreviews(base, new Map([['holiday-newyear', { sha256: 'x' }]]), 5)
+  assert.deepEqual(next.packs[0].themes, row.themes)
+  assert.deepEqual({ ...next.packs[0], preview: undefined }, { ...row, preview: undefined })
+  assert.equal(next.seq, 5)
 })

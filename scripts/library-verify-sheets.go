@@ -1,7 +1,7 @@
 //go:build ignore
 
 // Вторая половина library-verify (см. library-verify.go): рамки путём программы и их лист, мера
-// «тянется», общий лист -preview и -pull шаблонов из библиотеки.
+// «тянется», общий лист -preview и -pull шаблонов из библиотеки; версия программы для minApp (appVersion).
 package main
 
 import (
@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -492,4 +493,49 @@ func pullTpls(w io.Writer, lib, packID, out string) error {
 	}
 	fmt.Fprintf(w, "забрано шаблонов: %d\n", n)
 	return nil
+}
+
+var semver = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+// appVersion — версия программы для сверки minApp: явный -app либо info.productVersion из ближайшего
+// wails.json (текущая папка и выше). Пусто и «dev» не годятся: тогда minApp не сверялся бы вовсе.
+func appVersion(flagVal string) (string, error) {
+	if flagVal != "" {
+		if !semver.MatchString(flagVal) {
+			return "", fmt.Errorf("-app %q: нужна версия x.y.z", flagVal)
+		}
+		return flagVal, nil
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		data, err := os.ReadFile(filepath.Join(dir, "wails.json"))
+		if err == nil {
+			var w struct {
+				Info struct {
+					ProductVersion string `json:"productVersion"`
+				} `json:"info"`
+			}
+			if json.Unmarshal(data, &w) != nil || !semver.MatchString(w.Info.ProductVersion) {
+				return "", fmt.Errorf("%s: нет info.productVersion вида x.y.z; укажите -app", filepath.Join(dir, "wails.json"))
+			}
+			return w.Info.ProductVersion, nil
+		}
+		up := filepath.Dir(dir)
+		if up == dir {
+			return "", errors.New("нет wails.json в текущей папке и выше: запускайте из корня дерева или укажите -app x.y.z")
+		}
+		dir = up
+	}
+}
+
+func cmpOr(vals ...string) string {
+	for _, s := range vals {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }

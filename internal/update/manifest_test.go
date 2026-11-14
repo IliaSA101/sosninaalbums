@@ -63,17 +63,17 @@ func TestSetupName(t *testing.T) {
 
 func TestParseManifest(t *testing.T) {
 	_, f := setup("0.25.1", MinSetup)
-	ok, err := Parse(manifestBody(t, "0.25.1", &f, map[string]any{"minAuto": "0.25.0", "extra": 1}))
+	ok, err := Parse(manifestBody(t, "0.25.1", &f, map[string]any{"minAuto": "0.25.0", "extra": 1}), "")
 	if err != nil || ok.Version != "0.25.1" || ok.MinAuto != "0.25.0" || ok.Setup == nil || *ok.Setup != f || len(ok.Notes) != 2 || ok.Date != "2026-11-02" {
 		t.Fatalf("верный манифест: %v %+v", err, ok)
 	}
 	// Без записи Windows — манифест годен, установщика нет (только страница).
-	if m, err := Parse(manifestBody(t, "0.25.1", nil, nil)); err != nil || m.Setup != nil {
+	if m, err := Parse(manifestBody(t, "0.25.1", nil, nil), ""); err != nil || m.Setup != nil {
 		t.Errorf("без Windows: %v %+v", err, m)
 	}
 	bad := func(name string, f File, rest map[string]any, want error) {
 		t.Helper()
-		if _, err := Parse(manifestBody(t, "0.25.1", &f, rest)); !errors.Is(err, want) {
+		if _, err := Parse(manifestBody(t, "0.25.1", &f, rest), ""); !errors.Is(err, want) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -96,7 +96,7 @@ func TestParseManifest(t *testing.T) {
 	for _, size := range []int64{MinSetup, MaxSetup} { // края годны
 		g = f
 		g.Size = size
-		if _, err := Parse(manifestBody(t, "0.25.1", &g, nil)); err != nil {
+		if _, err := Parse(manifestBody(t, "0.25.1", &g, nil), ""); err != nil {
 			t.Errorf("размер %d на краю: %v", size, err)
 		}
 	}
@@ -106,11 +106,11 @@ func TestParseManifest(t *testing.T) {
 		bad("sha256 "+sum, g, nil, ErrManifest)
 	}
 	for _, body := range []string{"", "null", "[]", "{", `{"format":"1"}`} {
-		if _, err := Parse([]byte(body)); !errors.Is(err, ErrManifest) {
+		if _, err := Parse([]byte(body), ""); !errors.Is(err, ErrManifest) {
 			t.Errorf("%q: %v", body, err)
 		}
 	}
-	if _, err := Parse([]byte(`{"format":1,"app":"sosninaalbums","version":"1.0.0","pad":"` + strings.Repeat("x", maxBody) + `"}`)); !errors.Is(err, ErrManifest) {
+	if _, err := Parse([]byte(`{"format":1,"app":"sosninaalbums","version":"1.0.0","pad":"`+strings.Repeat("x", maxBody)+`"}`), ""); !errors.Is(err, ErrManifest) {
 		t.Errorf("тело больше предела: %v", err)
 	}
 }
@@ -121,14 +121,14 @@ func TestParseNotes(t *testing.T) {
 	for i := range 8 {
 		notes = append(notes, "ещё "+string(rune('a'+i)))
 	}
-	m, err := Parse(manifestBody(t, "0.25.1", nil, map[string]any{"notes": notes}))
+	m, err := Parse(manifestBody(t, "0.25.1", nil, map[string]any{"notes": notes}), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(m.Notes) != 8 || m.Notes[0] != "Первая строка" || m.Notes[1] != "сневидимым" || len([]rune(m.Notes[2])) != 300 || m.Notes[3] != "ещё a" {
 		t.Errorf("notes: %q", m.Notes)
 	}
-	if m, err := Parse(manifestBody(t, "0.25.1", nil, map[string]any{"notes": nil})); err != nil || m.Notes == nil || len(m.Notes) != 0 {
+	if m, err := Parse(manifestBody(t, "0.25.1", nil, map[string]any{"notes": nil}), ""); err != nil || m.Notes == nil || len(m.Notes) != 0 {
 		t.Errorf("без notes: %v %#v", err, m.Notes)
 	}
 }
@@ -145,7 +145,7 @@ func TestManifestFixture(t *testing.T) {
 	if want := readFixture(t, "body.json"); !bytes.Equal(bytes.TrimSpace(body), bytes.TrimSpace(want)) {
 		t.Error("body из конверта не равен body.json")
 	}
-	m, err := Parse(body)
+	m, err := Parse(body, "")
 	if err != nil || m.Version != "0.25.1" || m.MinAuto != "0.25.0" || m.Date != "2026-11-02" || len(m.Notes) != 3 ||
 		m.Setup == nil || m.Setup.Name != SetupName("0.25.1") || m.Setup.Size != 8166433 || len(m.Setup.SHA256) != 64 {
 		t.Fatalf("фикстура: %v %+v", err, m)

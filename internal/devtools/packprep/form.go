@@ -7,7 +7,7 @@ import (
 )
 
 // Копия правил вида стикера из internal/decor/browse.go (formOf): devtools не импортирует internal
-// (depguard), как themeSet в recipe.go — копия тем decor. Расхождение копий ловит общий вектор
+// (depguard), как builtinThemeIDs в themes.go — копия тем decor. Расхождение копий ловит общий вектор
 // testdata/parity/decorform.json (TestFormParity здесь и TestFormOf в decor).
 
 // dividerRatio — сторона не меньше чем в 4 раза длиннее другой: разделитель (≥, не >: 2800×700 — ровно 4:1).

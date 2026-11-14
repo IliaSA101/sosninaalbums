@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { NO_UPDATE, type UpdateInfo } from './updateapi'
-import { failedText, justText, offerToast, progressLine, progressPct, readyToast, retryAct, startedText, updateView } from './updatetext'
+import {
+  blockHint,
+  failedText,
+  justText,
+  lastToast,
+  offerToast,
+  osName,
+  progressLine,
+  progressPct,
+  readyToast,
+  retryAct,
+  startedText,
+  updateView,
+} from './updatetext'
 
 const info = (p: Partial<UpdateInfo>): UpdateInfo => ({ ...NO_UPDATE, mode: 'install', ...p })
 const labels = (i: UpdateInfo) => updateView(i).btns.map((b) => b.label)
@@ -98,6 +111,74 @@ describe('updateView: текст и кнопки по фазе (design §3.1)', 
       expect(updateView(info({ phase, mode: 'setup' })).hint).toBe(hint)
     expect(updateView(info({ phase: 'latest', mode: 'install' })).hint).toBe('')
     expect(updateView(info({ phase: 'latest', mode: 'page' })).hint).toBe('')
+  })
+})
+
+const mac12 = { os: 'darwin', osNeed: '13.0', blocked: '0.43.0' } as const
+
+describe('osName: система словами (design §6)', () => {
+  it('darwin 13.0 → «macOS 13», 13.1 остаётся; windows, прочее, пусто', () => {
+    expect(osName('darwin', '13.0')).toBe('macOS 13')
+    expect(osName('darwin', '13.1')).toBe('macOS 13.1')
+    expect(osName('darwin', '13')).toBe('macOS 13')
+    expect(osName('windows', '10.0.19045')).toBe('Windows 10.0.19045')
+    expect(osName('linux', '5.4')).toBe('система 5.4')
+    expect(osName('darwin', '')).toBe('более новая система')
+  })
+
+  it('все хвостовые нули отбрасываются, значащие остаются', () => {
+    expect(osName('darwin', '13.0.0')).toBe('macOS 13')
+    expect(osName('darwin', '12.0')).toBe('macOS 12')
+    expect(osName('darwin', '10.13.0')).toBe('macOS 10.13')
+    expect(osName('darwin', '13.1')).toBe('macOS 13.1')
+  })
+})
+
+describe('блокировка по системе (171): строка, подсказка, кнопки', () => {
+  it('latest + blocked: «Эта версия — последняя для вашей системы», подсказка, одна кнопка «Проверить», ссылки нет', () => {
+    const v = updateView(info({ phase: 'latest', mode: 'page', ...mac12 }))
+    expect(v.line).toBe('Эта версия — последняя для вашей системы')
+    expect(v.hint).toBe('Для версии 0.43.0 и следующих нужна macOS 13 или новее')
+    expect(v.btns).toEqual([{ act: 'check', label: 'Проверить обновления', disabled: false }])
+    expect(v.pageLink).toBe(false)
+  })
+
+  it('latest без blocked — прежняя строка и пустая подсказка', () => {
+    const v = updateView(info({ phase: 'latest', mode: 'page', os: 'darwin' }))
+    expect(v.line).toBe('Установлена последняя версия')
+    expect(v.hint).toBe('')
+  })
+
+  it('available + blocked (ступень lastOn): обычное предложение и подсказка «Это последняя версия…»', () => {
+    const v = updateView(info({ phase: 'available', mode: 'page', version: '0.42.0', ...mac12 }))
+    expect(v.line).toBe('Вышла версия 0.42.0')
+    expect(v.hint).toBe('Это последняя версия для вашей системы: для 0.43.0 и следующих нужна macOS 13 или новее')
+    expect(v.btns[1]).toEqual({ act: 'page', label: 'Скачать', primary: true })
+  })
+
+  it('подсказка блокировки заменяет «Поставьте установщиком…» на переносной Windows', () => {
+    const v = updateView(info({ phase: 'latest', mode: 'setup', os: 'windows', osNeed: '11', blocked: '0.50.0' }))
+    expect(v.hint).toBe('Для версии 0.50.0 и следующих нужна Windows 11 или новее')
+    expect(updateView(info({ phase: 'latest', mode: 'setup', os: 'windows' })).hint).toContain('Поставьте установщиком')
+  })
+
+  it('blocked в фазах не про предложение (checking, error) подсказку не меняет', () => {
+    expect(updateView(info({ phase: 'checking', mode: 'page', ...mac12 })).hint).toBe('')
+    expect(updateView(info({ phase: 'error', mode: 'page', error: 'x', ...mac12 })).hint).toBe('')
+  })
+
+  it('минимум неизвестен — «более новая система», без «или новее»', () => {
+    expect(blockHint({ phase: 'latest', os: 'darwin', osNeed: '', blocked: '0.43.0' })).toBe(
+      'Для версии 0.43.0 и следующих нужна более новая система',
+    )
+  })
+
+  it('тост update:last: слово ОС и без кнопки', () => {
+    expect(lastToast({ os: 'darwin', osNeed: '13.0', last: '0.43.0' })).toBe(
+      'Вышла версия 0.43.0 для macOS 13 и новее. Ваша версия программы — последняя для этой системы',
+    )
+    expect(lastToast({ os: 'windows', osNeed: '11', last: '0.50.0' })).toContain('для Windows 11 и новее')
+    expect(lastToast({ os: 'darwin', osNeed: '', last: '0.43.0' })).toContain('для более новой системы.')
   })
 })
 

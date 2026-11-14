@@ -107,7 +107,8 @@ func requireFilled(t *testing.T, path string, v reflect.Value) {
 			return
 		}
 		for i := range v.NumField() {
-			if v.Type().Field(i).IsExported() {
+			// Поле с тегом json:"-" (Info.ThemesRead, 170) в ответ не идёт и круг JSON не проходит: заполнять нечем.
+			if f := v.Type().Field(i); f.IsExported() && f.Tag.Get("json") != "-" {
 				requireFilled(t, path+"."+v.Type().Field(i).Name, v.Field(i))
 			}
 		}

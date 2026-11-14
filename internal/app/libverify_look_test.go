@@ -160,7 +160,10 @@ func TestLibraryVerifyLooks(t *testing.T) {
 		t.Errorf("id и minApp: код %d\n%s", code, text)
 	}
 	// Набор без макетов проверяется как раньше.
-	if text, code := g.run(t, "-app", "0.28.0", packZip(t, "plain", 1, files...)); code != 0 || strings.Contains(text, "макет") {
+	// Слово «макет» нельзя искать как есть: оно стоит в шапке таблицы тем («… / разв / макет»). Ищем то,
+	// что печатает только проверка макетов: её провалы, строку шагов и пути layouts/.
+	text, code = g.run(t, "-app", "0.28.0", packZip(t, "plain", 1, files...))
+	if code != 0 || countRe(t, `макеты альбома|макет не читается|layouts/|шагов \d+, сторон обложки`, text) != 0 {
 		t.Errorf("набор без макетов: код %d\n%s", code, text)
 	}
 }
