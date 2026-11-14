@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Тип файла .salbum для shared-mime-info (спека 112): двойной щелчок открывает программу через MimeType в .desktop -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-sosninaalbums">
+    <comment>Sosnina Albums album</comment>
+    <comment xml:lang="ru">Альбом Sosnina Albums</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.salbum"/>
+    <icon name="sosninaalbums"/>
+  </mime-type>
+</mime-info>

@@ -1,0 +1,48 @@
+{
+  "version": 16,
+  "product": "album",
+  "folders": [
+    {
+      "path": "Март",
+      "abs": "C:\\album\\Март"
+    }
+  ],
+  "settings": {
+    "pageW": 300,
+    "pageH": 300,
+    "margin": 12,
+    "gap": 3,
+    "layflat": true,
+    "foldAny": false,
+    "dpi": 300,
+    "bg": "",
+    "safe": 8
+  },
+  "spreads": [],
+  "photos": {},
+  "loose": [
+    {
+      "id": "3fa9c01b7d22",
+      "at": 1792501500,
+      "files": [
+        {
+          "path": "Телефон/20261019_181522.jpg",
+          "abs": "C:\\album\\Телефон\\20261019_181522.jpg"
+        },
+        {
+          "path": "D:\\Загрузки\\bouquet.jpg"
+        }
+      ]
+    },
+    {
+      "id": "0a0b0c0d0e0f",
+      "at": 1792588000,
+      "files": [
+        {
+          "path": "../Телефон/2.png",
+          "abs": "C:\\Ивановы\\Телефон\\2.png"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+version: 2
+# Раз в месяц и одним PR на экосистему (владелец 23.10): россыпь еженедельных PR висела неделями —
+# main обновляется только выпуском версии, обновления вносятся в dev целиком.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+    ignore:
+      # TypeScript держим на 6.0.x: peer typescript-eslint — <6.1.0, а TS 7 (новый компилятор) не имеет JS API
+      # для typescript-eslint и svelte2tsx; нативный tsgo ставится отдельно (@typescript/native, спека 169)
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Псевдоним npm:typescript@7 для svelte-check --tsgo: поддержка псевдонимов Dependabot не подтверждена,
+      # поднимаем руками вместе с svelte-check (169-4)
+      - dependency-name: "@typescript/native"
+      # Типы Node идут за Node 24 в CI, а не за последним мажором
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
